@@ -7,6 +7,9 @@ export default defineConfig({
     profiles: {
       default: {
         version: "0.8.28",
+        settings: {
+          viaIR: true,
+        },
       },
       production: {
         version: "0.8.28",
@@ -14,6 +17,7 @@ export default defineConfig({
           optimizer: {
             enabled: true,
             runs: 200,
+            viaIR: true,
           },
         },
       },
