@@ -1,5 +1,5 @@
 {
-  "name": "evm-contracts",
+  "name": "@isonia/evm-contracts",
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
