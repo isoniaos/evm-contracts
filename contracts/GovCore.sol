@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {GovTypes} from "./GovTypes.sol";
@@ -36,9 +36,11 @@ contract GovCore is IGovCore {
     mapping(uint64 => GovTypes.Role) public roles;
     mapping(uint64 => GovTypes.Mandate) public mandates;
     mapping(uint64 => mapping(GovTypes.ProposalType => GovTypes.PolicyRule)) private policyRules;
+    mapping(uint64 => mapping(GovTypes.ProposalType => mapping(uint64 => GovTypes.PolicyRule))) private policyRuleVersions;
+    mapping(uint64 => mapping(GovTypes.ProposalType => uint64)) public policyVersion;
     mapping(uint64 => uint64[]) private orgBodies;
     mapping(uint64 => uint64[]) private bodyRoles;
-    mapping(address => uint64[]) private holderMandates;
+    mapping(address => mapping(uint64 => uint64[])) private holderOrgMandates;
 
     event OrganizationCreated(uint64 indexed orgId, string slug, address indexed admin, string metadataURI);
     event OrganizationUpdated(uint64 indexed orgId, string metadataURI);
@@ -62,6 +64,7 @@ contract GovCore is IGovCore {
     event PolicyRuleSet(
         uint64 indexed orgId,
         GovTypes.ProposalType indexed proposalType,
+        uint64 version,
         uint64[] requiredApprovalBodies,
         uint64[] vetoBodies,
         uint64 executorBody,
@@ -206,7 +209,7 @@ contract GovCore is IGovCore {
             active: true,
             revoked: false
         });
-        holderMandates[holder].push(mandateId);
+        holderOrgMandates[holder][orgId].push(mandateId);
         emit MandateAssigned(orgId, mandateId, roleId, body.id, holder, startTime, endTime, proposalTypeMask, spendingLimit);
     }
 
@@ -243,28 +246,23 @@ contract GovCore is IGovCore {
         if (!enabled && executorBody != 0) {
             _requireValidExecutorBody(orgId, executorBody);
         }
-        GovTypes.PolicyRule storage rule = policyRules[orgId][proposalType];
-        delete rule.requiredApprovalBodies;
-        delete rule.vetoBodies;
-        rule.orgId = orgId;
-        rule.proposalType = proposalType;
-        rule.executorBody = executorBody;
-        rule.timelockSeconds = timelockSeconds;
-        rule.enabled = enabled;
-        _writeUint64Array(rule.requiredApprovalBodies, requiredApprovalBodies);
-        _writeUint64Array(rule.vetoBodies, vetoBodies);
-        emit PolicyRuleSet(orgId, proposalType, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
+        uint64 nextVersion = policyVersion[orgId][proposalType] + 1;
+        policyVersion[orgId][proposalType] = nextVersion;
+        _writePolicyRule(policyRules[orgId][proposalType], orgId, proposalType, nextVersion, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
+        _writePolicyRule(policyRuleVersions[orgId][proposalType][nextVersion], orgId, proposalType, nextVersion, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
+        emit PolicyRuleSet(orgId, proposalType, nextVersion, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
     }
 
     function getPolicyRule(uint64 orgId, GovTypes.ProposalType proposalType) external view returns (GovTypes.PolicyRule memory rule) {
-        GovTypes.PolicyRule storage storedRule = policyRules[orgId][proposalType];
-        rule.orgId = storedRule.orgId;
-        rule.proposalType = storedRule.proposalType;
-        rule.requiredApprovalBodies = _copyUint64Array(storedRule.requiredApprovalBodies);
-        rule.vetoBodies = _copyUint64Array(storedRule.vetoBodies);
-        rule.executorBody = storedRule.executorBody;
-        rule.timelockSeconds = storedRule.timelockSeconds;
-        rule.enabled = storedRule.enabled;
+        rule = _copyPolicyRule(policyRules[orgId][proposalType]);
+    }
+
+    function getPolicyRuleAtVersion(
+        uint64 orgId,
+        GovTypes.ProposalType proposalType,
+        uint64 version
+    ) external view returns (GovTypes.PolicyRule memory rule) {
+        rule = _copyPolicyRule(policyRuleVersions[orgId][proposalType][version]);
     }
 
     function isOrganizationActive(uint64 orgId) public view returns (bool isActive) {
@@ -297,7 +295,7 @@ contract GovCore is IGovCore {
     }
 
     function isBodyMember(uint64 orgId, address actor, uint64 bodyId) external view returns (bool isMember) {
-        uint64[] storage mandateIds = holderMandates[actor];
+        uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
             GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
@@ -319,7 +317,7 @@ contract GovCore is IGovCore {
         GovTypes.RoleType roleType,
         GovTypes.ProposalType proposalType
     ) internal view returns (bool hasMatchingRole) {
-        uint64[] storage mandateIds = holderMandates[actor];
+        uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
             GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
@@ -337,7 +335,7 @@ contract GovCore is IGovCore {
         GovTypes.RoleType roleType,
         GovTypes.ProposalType proposalType
     ) internal view returns (bool hasMatchingMandate) {
-        uint64[] storage mandateIds = holderMandates[actor];
+        uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
             GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
@@ -498,6 +496,40 @@ contract GovCore is IGovCore {
             revert InvalidExecutorBody();
         }
         _requireBodyInOrg(orgId, bodyId);
+    }
+
+    function _writePolicyRule(
+        GovTypes.PolicyRule storage rule,
+        uint64 orgId,
+        GovTypes.ProposalType proposalType,
+        uint64 version,
+        uint64[] calldata requiredApprovalBodies,
+        uint64[] calldata vetoBodies,
+        uint64 executorBody,
+        uint64 timelockSeconds,
+        bool enabled
+    ) internal {
+        delete rule.requiredApprovalBodies;
+        delete rule.vetoBodies;
+        rule.orgId = orgId;
+        rule.proposalType = proposalType;
+        rule.version = version;
+        rule.executorBody = executorBody;
+        rule.timelockSeconds = timelockSeconds;
+        rule.enabled = enabled;
+        _writeUint64Array(rule.requiredApprovalBodies, requiredApprovalBodies);
+        _writeUint64Array(rule.vetoBodies, vetoBodies);
+    }
+
+    function _copyPolicyRule(GovTypes.PolicyRule storage storedRule) internal view returns (GovTypes.PolicyRule memory rule) {
+        rule.orgId = storedRule.orgId;
+        rule.proposalType = storedRule.proposalType;
+        rule.version = storedRule.version;
+        rule.requiredApprovalBodies = _copyUint64Array(storedRule.requiredApprovalBodies);
+        rule.vetoBodies = _copyUint64Array(storedRule.vetoBodies);
+        rule.executorBody = storedRule.executorBody;
+        rule.timelockSeconds = storedRule.timelockSeconds;
+        rule.enabled = storedRule.enabled;
     }
 
     function _writeUint64Array(uint64[] storage target, uint64[] calldata source) internal {

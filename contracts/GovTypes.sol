@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 library GovTypes {
@@ -101,6 +101,7 @@ library GovTypes {
     struct PolicyRule {
         uint64 orgId;
         ProposalType proposalType;
+        uint64 version;
         uint64[] requiredApprovalBodies;
         uint64[] vetoBodies;
         uint64 executorBody;
@@ -112,6 +113,7 @@ library GovTypes {
         uint64 id;
         uint64 orgId;
         ProposalType proposalType;
+        uint64 policyVersion;
         ProposalStatus status;
         address creator;
         address target;

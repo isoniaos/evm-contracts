@@ -230,6 +230,24 @@ describe("Protocol v0.1", function () {
     expect(await readBigInt(context.demoTarget, "number")).to.equal(123n);
   });
 
+  it("keeps the original policy route after a later policy update", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const proposal = await createProposal(context, PROPOSAL_TYPE.treasury, await context.demoTarget.getAddress(), 124n);
+    await invoke(context.govCore.connect(context.orgAdminA), "setPolicyRule", [context.orgA.orgId, PROPOSAL_TYPE.treasury, singleBody(context.orgA.bodies.councilBodyId), [], context.orgA.bodies.councilBodyId, 0, true]);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+    await expect(
+      invoke(context.govProposals.connect(context.outsider), "queueProposal", [context.orgA.orgId, proposal.proposalId]),
+    )
+      .to.be.revertedWithCustomError(context.govProposals, "InvalidProposalStatus")
+      .withArgs(2n);
+    await invoke(context.govProposals.connect(context.treasuryApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.treasuryBodyId]);
+    await invoke(context.govProposals.connect(context.outsider), "queueProposal", [context.orgA.orgId, proposal.proposalId]);
+    await expect(
+      invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]),
+    )
+      .to.be.revertedWithCustomError(context.govProposals, "TimelockNotExpired");
+  });
+
   it("allows veto and blocks later execution", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
     const proposal = await createProposal(context, PROPOSAL_TYPE.treasury, await context.demoTarget.getAddress(), 222n);

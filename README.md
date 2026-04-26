@@ -1,13 +1,21 @@
-# evm-contracts
+# IsoniaOS EVM Contracts
 
-Этот модуль является частью workspace **IsoniaOS**.
+EVM smart contracts for the IsoniaOS governance architecture protocol.
 
-## Назначение
+## Status
 
-См. `../docs/repository-boundaries.md` и `../docs/v0.1-tz.md`.
+v0.1 prototype / not production ready.
 
-## Для v0.1
+## Scope
 
-- держать scope минимальным
-- не выходить за границы текущей архитектуры
-- синхронизировать изменения со спецификациями в `../docs/`
+- shared multi-organization governance protocol
+- organizations
+- bodies
+- roles
+- mandates
+- policy rules
+- proposal lifecycle
+
+## Safety
+
+Not audited. Do not use in production.

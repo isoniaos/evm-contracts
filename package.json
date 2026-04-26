@@ -1,6 +1,7 @@
 {
   "name": "evm-contracts",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.9",
