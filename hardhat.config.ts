@@ -14,10 +14,10 @@ export default defineConfig({
       production: {
         version: "0.8.28",
         settings: {
+          viaIR: true,
           optimizer: {
             enabled: true,
             runs: 200,
-            viaIR: true,
           },
         },
       },
@@ -31,6 +31,11 @@ export default defineConfig({
     hardhatOp: {
       type: "edr-simulated",
       chainType: "op",
+    },
+    localhost: {
+      type: "http",
+      chainType: "l1",
+      url: "http://127.0.0.1:8545",
     },
     sepolia: {
       type: "http",

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "hardhat test",
-    "seed:v0.1": "hardhat run scripts/seed-v0.1.ts"
+    "deploy:local": "hardhat ignition deploy ignition/modules/IsoniaProtocolV01.ts --network localhost",
+    "seed:v0.1": "hardhat run scripts/seed-v0.1.ts",
+    "seed:local": "hardhat run scripts/seed-v0.1.ts --network localhost"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.9",
