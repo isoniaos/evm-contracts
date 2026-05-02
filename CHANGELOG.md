@@ -6,9 +6,15 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.5.0-alpha.3]
+
 ### Added
 
-- Added this changelog for release tracking and future release notes.
+- Added developer-preview deploy and seed script aliases for v0.5 local setup docs.
+
+### Changed
+
+- Refreshed README language around the v0.5 Developer Preview scope.
 
 ## [0.5.0-alpha.2]
 
@@ -24,6 +30,7 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.5.0-alpha.2...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.5.0-alpha.3...HEAD
+[0.5.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.2
 [0.1.0]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.1.0

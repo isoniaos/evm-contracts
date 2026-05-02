@@ -4,7 +4,7 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-v0.1 prototype / not production ready.
+v0.5 Developer Preview / not audited / not production ready.
 
 ## Scope
 
@@ -20,7 +20,7 @@ v0.1 prototype / not production ready.
 
 Not audited. Do not use in production.
 
-## Local v0.1 Deployment
+## Local Developer Preview Deployment
 
 Start a local Hardhat node:
 
@@ -31,7 +31,7 @@ corepack pnpm hardhat node --hostname 127.0.0.1 --port 8545
 Deploy protocol contracts with Ignition:
 
 ```txt
-corepack pnpm deploy:local
+corepack pnpm deploy:developer-preview
 ```
 
 Seed the Simple DAO+ and Bicameral preview topologies:
@@ -40,7 +40,7 @@ Seed the Simple DAO+ and Bicameral preview topologies:
 set GOV_CORE_ADDRESS=0x...
 set GOV_PROPOSALS_ADDRESS=0x...
 set DEMO_TARGET_ADDRESS=0x...
-corepack pnpm seed:local
+corepack pnpm seed:developer-preview
 ```
 
 Set balance in your browser wallet:
