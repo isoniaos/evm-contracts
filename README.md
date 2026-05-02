@@ -4,7 +4,11 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-v0.5 Developer Preview / not audited / not production ready.
+Active development target: v0.6 alpha preparation.
+
+Current package version remains `0.5.0-alpha.3`, the closed v0.5
+compatibility tag. v0.6 work starts from this baseline without changing
+protocol scope in this preparation pass.
 
 ## Scope
 
@@ -15,10 +19,6 @@ v0.5 Developer Preview / not audited / not production ready.
 - mandates
 - policy rules
 - proposal lifecycle
-
-## Safety
-
-Not audited. Do not use in production.
 
 ## Local Developer Preview Deployment
 

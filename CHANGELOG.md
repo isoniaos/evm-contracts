@@ -6,6 +6,10 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Prepared repository context for v0.6 alpha work after the closed v0.5 compatibility set.
+
 ## [0.5.0-alpha.3]
 
 ### Added
