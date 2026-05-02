@@ -42,3 +42,19 @@ set GOV_PROPOSALS_ADDRESS=0x...
 set DEMO_TARGET_ADDRESS=0x...
 corepack pnpm seed:local
 ```
+
+Set balance in your browser wallet:
+
+```txt
+npx hardhat console
+> await fetch("http://127.0.0.1:8545", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    method: "hardhat_setBalance",
+    params: ["your_wallet_address", "0x56BC75E2D63100000"],
+    id: 1
+  })
+});
+```
