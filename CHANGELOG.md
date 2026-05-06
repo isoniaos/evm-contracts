@@ -6,9 +6,21 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.6.0-alpha.3]
+
 ### Changed
 
+- Documentation updated.
+- Package version aligned to `0.6.0-alpha.3` for the v0.6 local demo stack.
+- Node engine baseline updated to `>=22`.
 - Prepared repository context for v0.6 alpha work after the closed v0.5 compatibility set.
+
+## [0.6.0-alpha.2]
+
+### Changed
+
+- Metadata-only v0.6 package alignment for the local demo stack.
+- No protocol or contract behavior changes.
 
 ## [0.5.0-alpha.3]
 
@@ -34,7 +46,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.5.0-alpha.3...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.6.0-alpha.2...HEAD
+[0.6.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.2
 [0.5.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.2
 [0.1.0]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.1.0

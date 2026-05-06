@@ -1,6 +1,6 @@
 {
   "name": "@isonia/evm-contracts",
-  "version": "0.6.0-alpha.2",
+  "version": "0.6.0-alpha.3",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -26,5 +26,8 @@
     "hardhat": "^3.4.1",
     "mocha": "^11.0.0",
     "typescript": "~5.8.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

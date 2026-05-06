@@ -4,11 +4,12 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-Active development target: v0.6 alpha preparation.
+Active development target: v0.6 alpha local demo baseline.
 
-Current package version remains `0.5.0-alpha.3`, the closed v0.5
-compatibility tag. v0.6 work starts from this baseline without changing
-protocol scope in this preparation pass.
+Current package version: `0.6.0-alpha.3`.
+
+This is a metadata-only alignment for the local demo stack. It does not
+change protocol behavior.
 
 ## Scope
 
