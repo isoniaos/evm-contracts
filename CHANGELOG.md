@@ -47,6 +47,7 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
 [Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.6.0-alpha.2...HEAD
+[0.6.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.3
 [0.6.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.2
 [0.5.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.2
