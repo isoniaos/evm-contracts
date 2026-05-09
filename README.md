@@ -6,8 +6,6 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 Active development target: v0.6 alpha local demo baseline.
 
-Current package version: `0.6.0-alpha.3`.
-
 This is a metadata-only alignment for the local demo stack. It does not
 change protocol behavior.
 
@@ -20,6 +18,22 @@ change protocol behavior.
 - mandates
 - policy rules
 - proposal lifecycle
+
+## Future Protocol Backlog
+
+### Bootstrap Finalization and Admin Handoff
+
+The v0.6 alpha contracts use the organization admin as bootstrap authority. A future protocol upgrade should add explicit bootstrap finalization so the admin can complete setup and then lose unilateral power over roles, mandates, and policy rules.
+
+After finalization, mandate and policy changes should move through governance-controlled proposals and routes, or through narrowly scoped role authority such as `BodyAdmin` where the contract model grants it. Contracts remain authoritative for governance power.
+
+### Admin Batch Activation
+
+A related future EVM contract upgrade should add typed admin batch functions for bootstrap setup groups. Batches should preserve `msg.sender` as the organization admin and should avoid arbitrary calldata multicall as the first production path.
+
+Preferred shapes include batch create bodies, batch create roles, batch assign mandates, batch set policy rules, or a typed bootstrap activation bundle. Batch activation must emit the same events expected by the Control Plane indexer so read models remain deterministically recoverable from contract events.
+
+These upgrades should be designed together: batch activation reduces setup friction, while bootstrap finalization prevents bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as the reliable v0.6 default, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
 
 ## Local Developer Preview Deployment
 

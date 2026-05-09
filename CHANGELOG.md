@@ -6,6 +6,12 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.6.0-alpha.4]
+
+### Added
+
+- Added a docs-only future protocol backlog note for bootstrap finalization, admin handoff, and typed admin batch activation.
+
 ## [0.6.0-alpha.3]
 
 ### Changed
@@ -46,7 +52,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.6.0-alpha.2...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.6.0-alpha.4...HEAD
+[0.6.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.4
 [0.6.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.3
 [0.6.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.2
 [0.5.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.5.0-alpha.3
