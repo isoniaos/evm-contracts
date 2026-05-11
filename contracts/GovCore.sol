@@ -21,7 +21,8 @@ import {
     InvalidStatusTransition,
     InvalidBodyKind,
     InvalidRoleType,
-    InvalidExecutorBody
+    InvalidExecutorBody,
+    EmptyBatch
 } from "./GovErrors.sol";
 
 contract GovCore is IGovCore {
@@ -121,6 +122,23 @@ contract GovCore is IGovCore {
 
     function createBody(uint64 orgId, GovTypes.BodyKind kind, string calldata metadataURI) external returns (uint64 bodyId) {
         _requireActiveOrgAdmin(orgId);
+        bodyId = _createBody(orgId, kind, metadataURI);
+    }
+
+    function batchCreateBodies(
+        uint64 orgId,
+        GovTypes.BodyCreateInput[] calldata inputs
+    ) external returns (uint64[] memory bodyIds) {
+        _requireActiveOrgAdmin(orgId);
+        uint256 inputCount = inputs.length;
+        _requireNonEmptyBatch(inputCount);
+        bodyIds = new uint64[](inputCount);
+        for (uint256 index = 0; index < inputCount; index++) {
+            bodyIds[index] = _createBody(orgId, inputs[index].kind, inputs[index].metadataURI);
+        }
+    }
+
+    function _createBody(uint64 orgId, GovTypes.BodyKind kind, string calldata metadataURI) internal returns (uint64 bodyId) {
         if (kind == GovTypes.BodyKind.Unknown) {
             revert InvalidBodyKind();
         }
@@ -149,6 +167,28 @@ contract GovCore is IGovCore {
 
     function createRole(uint64 orgId, uint64 bodyId, GovTypes.RoleType roleType, string calldata metadataURI) external returns (uint64 roleId) {
         _requireActiveOrgAdmin(orgId);
+        roleId = _createRole(orgId, bodyId, roleType, metadataURI);
+    }
+
+    function batchCreateRoles(
+        uint64 orgId,
+        GovTypes.RoleCreateInput[] calldata inputs
+    ) external returns (uint64[] memory roleIds) {
+        _requireActiveOrgAdmin(orgId);
+        uint256 inputCount = inputs.length;
+        _requireNonEmptyBatch(inputCount);
+        roleIds = new uint64[](inputCount);
+        for (uint256 index = 0; index < inputCount; index++) {
+            roleIds[index] = _createRole(orgId, inputs[index].bodyId, inputs[index].roleType, inputs[index].metadataURI);
+        }
+    }
+
+    function _createRole(
+        uint64 orgId,
+        uint64 bodyId,
+        GovTypes.RoleType roleType,
+        string calldata metadataURI
+    ) internal returns (uint64 roleId) {
         _requireBodyInOrg(orgId, bodyId);
         if (roleType == GovTypes.RoleType.Unknown) {
             revert InvalidRoleType();
@@ -186,6 +226,39 @@ contract GovCore is IGovCore {
         uint128 spendingLimit
     ) external returns (uint64 mandateId) {
         _requireActiveOrgAdmin(orgId);
+        mandateId = _assignMandate(orgId, roleId, holder, startTime, endTime, proposalTypeMask, spendingLimit);
+    }
+
+    function batchAssignMandates(
+        uint64 orgId,
+        GovTypes.MandateAssignInput[] calldata inputs
+    ) external returns (uint64[] memory mandateIds) {
+        _requireActiveOrgAdmin(orgId);
+        uint256 inputCount = inputs.length;
+        _requireNonEmptyBatch(inputCount);
+        mandateIds = new uint64[](inputCount);
+        for (uint256 index = 0; index < inputCount; index++) {
+            mandateIds[index] = _assignMandate(
+                orgId,
+                inputs[index].roleId,
+                inputs[index].holder,
+                inputs[index].startTime,
+                inputs[index].endTime,
+                inputs[index].proposalTypeMask,
+                inputs[index].spendingLimit
+            );
+        }
+    }
+
+    function _assignMandate(
+        uint64 orgId,
+        uint64 roleId,
+        address holder,
+        uint64 startTime,
+        uint64 endTime,
+        uint256 proposalTypeMask,
+        uint128 spendingLimit
+    ) internal returns (uint64 mandateId) {
         GovTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
         GovTypes.Body storage body = _requireBodyInOrg(orgId, role.bodyId);
         if (holder == address(0)) {
@@ -235,6 +308,35 @@ contract GovCore is IGovCore {
         bool enabled
     ) external {
         _requireActiveOrgAdmin(orgId);
+        _setPolicyRule(orgId, proposalType, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
+    }
+
+    function batchSetPolicyRules(uint64 orgId, GovTypes.PolicyRuleSetInput[] calldata inputs) external {
+        _requireActiveOrgAdmin(orgId);
+        uint256 inputCount = inputs.length;
+        _requireNonEmptyBatch(inputCount);
+        for (uint256 index = 0; index < inputCount; index++) {
+            _setPolicyRule(
+                orgId,
+                inputs[index].proposalType,
+                inputs[index].requiredApprovalBodies,
+                inputs[index].vetoBodies,
+                inputs[index].executorBody,
+                inputs[index].timelockSeconds,
+                inputs[index].enabled
+            );
+        }
+    }
+
+    function _setPolicyRule(
+        uint64 orgId,
+        GovTypes.ProposalType proposalType,
+        uint64[] calldata requiredApprovalBodies,
+        uint64[] calldata vetoBodies,
+        uint64 executorBody,
+        uint64 timelockSeconds,
+        bool enabled
+    ) internal {
         if (proposalType == GovTypes.ProposalType.Unknown) {
             revert InvalidProposalType();
         }
@@ -496,6 +598,12 @@ contract GovCore is IGovCore {
             revert InvalidExecutorBody();
         }
         _requireBodyInOrg(orgId, bodyId);
+    }
+
+    function _requireNonEmptyBatch(uint256 inputCount) internal pure {
+        if (inputCount == 0) {
+            revert EmptyBatch();
+        }
     }
 
     function _writePolicyRule(

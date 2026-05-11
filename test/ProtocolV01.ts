@@ -9,12 +9,14 @@ type DeployedContract = BaseContract;
 type SignerWithAddress = Awaited<ReturnType<EthersHelpers["getSigners"]>>[number];
 
 const BODY_KIND = {
+  unknown: 0n,
   generalCouncil: 1n,
   treasuryCommittee: 2n,
   securityCouncil: 3n,
 } as const;
 
 const ROLE_TYPE = {
+  unknown: 0n,
   proposer: 3n,
   approver: 4n,
   vetoer: 5n,
@@ -22,8 +24,11 @@ const ROLE_TYPE = {
 } as const;
 
 const PROPOSAL_TYPE = {
+  unknown: 0n,
   standard: 1n,
   treasury: 2n,
+  upgrade: 3n,
+  emergency: 4n,
 } as const;
 
 const PROPOSAL_STATUS = {
@@ -44,6 +49,39 @@ interface BodyContext {
 interface OrgContext {
   readonly orgId: bigint;
   readonly bodies: BodyContext;
+}
+
+interface BodyView {
+  readonly orgId: bigint;
+  readonly kind: bigint;
+  readonly active: boolean;
+  readonly metadataURI: string;
+}
+
+interface RoleView {
+  readonly orgId: bigint;
+  readonly bodyId: bigint;
+  readonly roleType: bigint;
+  readonly active: boolean;
+  readonly metadataURI: string;
+}
+
+interface MandateView {
+  readonly orgId: bigint;
+  readonly bodyId: bigint;
+  readonly roleId: bigint;
+  readonly holder: string;
+  readonly active: boolean;
+  readonly revoked: boolean;
+}
+
+interface PolicyRuleView {
+  readonly version: bigint;
+  readonly requiredApprovalBodies: readonly bigint[];
+  readonly vetoBodies: readonly bigint[];
+  readonly executorBody: bigint;
+  readonly timelockSeconds: bigint;
+  readonly enabled: boolean;
 }
 
 interface ProtocolContext {
@@ -67,6 +105,11 @@ interface ProposalView {
   readonly executableAt: bigint;
 }
 
+type BodyCreateInput = [bigint, string];
+type RoleCreateInput = [bigint, bigint, string];
+type MandateAssignInput = [bigint, string, bigint, bigint, bigint, bigint];
+type PolicyRuleSetInput = [bigint, bigint[], bigint[], bigint, bigint, boolean];
+
 function singleBody(bodyId: bigint): bigint[] {
   return [bodyId];
 }
@@ -88,6 +131,10 @@ async function nextRoleId(govCore: DeployedContract): Promise<bigint> {
   return readBigInt(govCore, "nextRoleId");
 }
 
+async function nextMandateId(govCore: DeployedContract): Promise<bigint> {
+  return readBigInt(govCore, "nextMandateId");
+}
+
 async function nextProposalId(govProposals: DeployedContract): Promise<bigint> {
   return readBigInt(govProposals, "nextProposalId");
 }
@@ -107,6 +154,30 @@ async function readProposal(govProposals: DeployedContract, proposalId: bigint):
   const method = govProposals.getFunction("proposals");
   const proposal = await method(proposalId) as { status: bigint; executableAt: bigint };
   return { status: proposal.status, executableAt: proposal.executableAt };
+}
+
+async function readBody(govCore: DeployedContract, bodyId: bigint): Promise<BodyView> {
+  const method = govCore.getFunction("bodies");
+  const body = await method(bodyId) as BodyView;
+  return body;
+}
+
+async function readRole(govCore: DeployedContract, roleId: bigint): Promise<RoleView> {
+  const method = govCore.getFunction("roles");
+  const role = await method(roleId) as RoleView;
+  return role;
+}
+
+async function readMandate(govCore: DeployedContract, mandateId: bigint): Promise<MandateView> {
+  const method = govCore.getFunction("mandates");
+  const mandate = await method(mandateId) as MandateView;
+  return mandate;
+}
+
+async function readPolicyRule(govCore: DeployedContract, orgId: bigint, proposalType: bigint): Promise<PolicyRuleView> {
+  const method = govCore.getFunction("getPolicyRule");
+  const rule = await method(orgId, proposalType) as PolicyRuleView;
+  return rule;
 }
 
 async function createOrganization(govCore: DeployedContract, admin: SignerWithAddress, slug: string): Promise<bigint> {
@@ -193,6 +264,197 @@ async function increaseTime(seconds: bigint): Promise<void> {
 }
 
 describe("Protocol v0.1", function () {
+  describe("typed admin batch activation", function () {
+    it("creates bodies in a typed batch and emits the existing per-body events", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const firstBodyId: bigint = await nextBodyId(context.govCore);
+      const inputs: BodyCreateInput[] = [
+        [BODY_KIND.generalCouncil, "ipfs://batch-council"],
+        [BODY_KIND.securityCouncil, "ipfs://batch-security"],
+      ];
+      const batchCreateBodies = context.govCore.connect(context.orgAdminA).getFunction("batchCreateBodies");
+
+      await expect(batchCreateBodies(context.orgA.orgId, inputs))
+        .to.emit(context.govCore, "BodyCreated")
+        .withArgs(context.orgA.orgId, firstBodyId, BODY_KIND.generalCouncil, "ipfs://batch-council")
+        .and.to.emit(context.govCore, "BodyCreated")
+        .withArgs(context.orgA.orgId, firstBodyId + 1n, BODY_KIND.securityCouncil, "ipfs://batch-security");
+
+      expect(await nextBodyId(context.govCore)).to.equal(firstBodyId + 2n);
+      const firstBody: BodyView = await readBody(context.govCore, firstBodyId);
+      const secondBody: BodyView = await readBody(context.govCore, firstBodyId + 1n);
+      expect(firstBody.orgId).to.equal(context.orgA.orgId);
+      expect(firstBody.kind).to.equal(BODY_KIND.generalCouncil);
+      expect(firstBody.active).to.equal(true);
+      expect(firstBody.metadataURI).to.equal("ipfs://batch-council");
+      expect(secondBody.orgId).to.equal(context.orgA.orgId);
+      expect(secondBody.kind).to.equal(BODY_KIND.securityCouncil);
+      expect(secondBody.active).to.equal(true);
+      expect(secondBody.metadataURI).to.equal("ipfs://batch-security");
+    });
+
+    it("creates roles in a typed batch and emits the existing per-role events", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const firstRoleId: bigint = await nextRoleId(context.govCore);
+      const inputs: RoleCreateInput[] = [
+        [context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://batch-approver"],
+        [context.orgA.bodies.securityBodyId, ROLE_TYPE.vetoer, "ipfs://batch-vetoer"],
+      ];
+      const batchCreateRoles = context.govCore.connect(context.orgAdminA).getFunction("batchCreateRoles");
+
+      await expect(batchCreateRoles(context.orgA.orgId, inputs))
+        .to.emit(context.govCore, "RoleCreated")
+        .withArgs(context.orgA.orgId, firstRoleId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://batch-approver")
+        .and.to.emit(context.govCore, "RoleCreated")
+        .withArgs(context.orgA.orgId, firstRoleId + 1n, context.orgA.bodies.securityBodyId, ROLE_TYPE.vetoer, "ipfs://batch-vetoer");
+
+      expect(await nextRoleId(context.govCore)).to.equal(firstRoleId + 2n);
+      const firstRole: RoleView = await readRole(context.govCore, firstRoleId);
+      const secondRole: RoleView = await readRole(context.govCore, firstRoleId + 1n);
+      expect(firstRole.orgId).to.equal(context.orgA.orgId);
+      expect(firstRole.bodyId).to.equal(context.orgA.bodies.councilBodyId);
+      expect(firstRole.roleType).to.equal(ROLE_TYPE.approver);
+      expect(firstRole.active).to.equal(true);
+      expect(firstRole.metadataURI).to.equal("ipfs://batch-approver");
+      expect(secondRole.orgId).to.equal(context.orgA.orgId);
+      expect(secondRole.bodyId).to.equal(context.orgA.bodies.securityBodyId);
+      expect(secondRole.roleType).to.equal(ROLE_TYPE.vetoer);
+      expect(secondRole.active).to.equal(true);
+      expect(secondRole.metadataURI).to.equal("ipfs://batch-vetoer");
+    });
+
+    it("assigns mandates in a typed batch and emits the existing per-mandate events", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const approverRoleId: bigint = await createRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://batch-mandate-approver");
+      const executorRoleId: bigint = await createRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.executor, "ipfs://batch-mandate-executor");
+      const firstMandateId: bigint = await nextMandateId(context.govCore);
+      const standardMask: bigint = 1n << PROPOSAL_TYPE.standard;
+      const treasuryMask: bigint = 1n << PROPOSAL_TYPE.treasury;
+      const inputs: MandateAssignInput[] = [
+        [approverRoleId, context.councilApprover.address, 0n, 0n, standardMask, 0n],
+        [executorRoleId, context.executor.address, 0n, 0n, treasuryMask, 0n],
+      ];
+      const batchAssignMandates = context.govCore.connect(context.orgAdminA).getFunction("batchAssignMandates");
+
+      await expect(batchAssignMandates(context.orgA.orgId, inputs))
+        .to.emit(context.govCore, "MandateAssigned")
+        .withArgs(context.orgA.orgId, firstMandateId, approverRoleId, context.orgA.bodies.councilBodyId, context.councilApprover.address, 0n, 0n, standardMask, 0n)
+        .and.to.emit(context.govCore, "MandateAssigned")
+        .withArgs(context.orgA.orgId, firstMandateId + 1n, executorRoleId, context.orgA.bodies.councilBodyId, context.executor.address, 0n, 0n, treasuryMask, 0n);
+
+      expect(await nextMandateId(context.govCore)).to.equal(firstMandateId + 2n);
+      const firstMandate: MandateView = await readMandate(context.govCore, firstMandateId);
+      const secondMandate: MandateView = await readMandate(context.govCore, firstMandateId + 1n);
+      expect(firstMandate.orgId).to.equal(context.orgA.orgId);
+      expect(firstMandate.roleId).to.equal(approverRoleId);
+      expect(firstMandate.holder).to.equal(context.councilApprover.address);
+      expect(firstMandate.active).to.equal(true);
+      expect(firstMandate.revoked).to.equal(false);
+      expect(secondMandate.orgId).to.equal(context.orgA.orgId);
+      expect(secondMandate.roleId).to.equal(executorRoleId);
+      expect(secondMandate.holder).to.equal(context.executor.address);
+      expect(secondMandate.active).to.equal(true);
+      expect(secondMandate.revoked).to.equal(false);
+    });
+
+    it("sets policy rules in a typed batch and emits the existing per-policy events", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const inputs: PolicyRuleSetInput[] = [
+        [PROPOSAL_TYPE.standard, singleBody(context.orgB.bodies.councilBodyId), [], context.orgB.bodies.councilBodyId, 0n, true],
+        [PROPOSAL_TYPE.emergency, singleBody(context.orgB.bodies.securityBodyId), singleBody(context.orgB.bodies.councilBodyId), context.orgB.bodies.securityBodyId, 60n, true],
+      ];
+      const batchSetPolicyRules = context.govCore.connect(context.orgAdminB).getFunction("batchSetPolicyRules");
+
+      await expect(batchSetPolicyRules(context.orgB.orgId, inputs))
+        .to.emit(context.govCore, "PolicyRuleSet")
+        .withArgs(context.orgB.orgId, PROPOSAL_TYPE.standard, 1n, singleBody(context.orgB.bodies.councilBodyId), [], context.orgB.bodies.councilBodyId, 0n, true)
+        .and.to.emit(context.govCore, "PolicyRuleSet")
+        .withArgs(context.orgB.orgId, PROPOSAL_TYPE.emergency, 1n, singleBody(context.orgB.bodies.securityBodyId), singleBody(context.orgB.bodies.councilBodyId), context.orgB.bodies.securityBodyId, 60n, true);
+
+      const standardRule: PolicyRuleView = await readPolicyRule(context.govCore, context.orgB.orgId, PROPOSAL_TYPE.standard);
+      const emergencyRule: PolicyRuleView = await readPolicyRule(context.govCore, context.orgB.orgId, PROPOSAL_TYPE.emergency);
+      expect(standardRule.version).to.equal(1n);
+      expect([...standardRule.requiredApprovalBodies]).to.deep.equal(singleBody(context.orgB.bodies.councilBodyId));
+      expect([...standardRule.vetoBodies]).to.deep.equal([]);
+      expect(standardRule.executorBody).to.equal(context.orgB.bodies.councilBodyId);
+      expect(standardRule.timelockSeconds).to.equal(0n);
+      expect(standardRule.enabled).to.equal(true);
+      expect(emergencyRule.version).to.equal(1n);
+      expect([...emergencyRule.requiredApprovalBodies]).to.deep.equal(singleBody(context.orgB.bodies.securityBodyId));
+      expect([...emergencyRule.vetoBodies]).to.deep.equal(singleBody(context.orgB.bodies.councilBodyId));
+      expect(emergencyRule.executorBody).to.equal(context.orgB.bodies.securityBodyId);
+      expect(emergencyRule.timelockSeconds).to.equal(60n);
+      expect(emergencyRule.enabled).to.equal(true);
+    });
+
+    it("keeps the serial admin setup functions working", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const bodyId: bigint = await createBody(context.govCore, context.orgAdminB, context.orgB.orgId, BODY_KIND.generalCouncil, "ipfs://serial-body");
+      const roleId: bigint = await createRole(context.govCore, context.orgAdminB, context.orgB.orgId, bodyId, ROLE_TYPE.approver, "ipfs://serial-role");
+      await assignMandate(context.govCore, context.orgAdminB, context.orgB.orgId, roleId, context.treasuryApprover, PROPOSAL_TYPE.standard);
+      await invoke(context.govCore.connect(context.orgAdminB), "setPolicyRule", [context.orgB.orgId, PROPOSAL_TYPE.standard, singleBody(bodyId), [], bodyId, 0, true]);
+
+      const canApprove: boolean = await context.govCore.getFunction("canActOnProposalType")(context.orgB.orgId, context.treasuryApprover.address, bodyId, ROLE_TYPE.approver, PROPOSAL_TYPE.standard) as boolean;
+      const rule: PolicyRuleView = await readPolicyRule(context.govCore, context.orgB.orgId, PROPOSAL_TYPE.standard);
+      expect(canApprove).to.equal(true);
+      expect(rule.version).to.equal(1n);
+      expect([...rule.requiredApprovalBodies]).to.deep.equal(singleBody(bodyId));
+    });
+
+    it("rejects typed batch calls from non-admin callers", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const inputs: BodyCreateInput[] = [[BODY_KIND.generalCouncil, "ipfs://unauthorized-body"]];
+
+      await expect(invoke(context.govCore.connect(context.outsider), "batchCreateBodies", [context.orgA.orgId, inputs]))
+        .to.be.revertedWithCustomError(context.govCore, "Unauthorized")
+        .withArgs(context.outsider.address);
+    });
+
+    it("rejects empty typed batches explicitly", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateBodies", [context.orgA.orgId, []]))
+        .to.be.revertedWithCustomError(context.govCore, "EmptyBatch");
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateRoles", [context.orgA.orgId, []]))
+        .to.be.revertedWithCustomError(context.govCore, "EmptyBatch");
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchAssignMandates", [context.orgA.orgId, []]))
+        .to.be.revertedWithCustomError(context.govCore, "EmptyBatch");
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchSetPolicyRules", [context.orgA.orgId, []]))
+        .to.be.revertedWithCustomError(context.govCore, "EmptyBatch");
+    });
+
+    it("rejects invalid typed batch references with the existing custom errors", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const missingRoleId = 99_999n;
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateRoles", [context.orgA.orgId, [[context.orgB.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://foreign-body-role"]]]))
+        .to.be.revertedWithCustomError(context.govCore, "BodyDoesNotBelongToOrg")
+        .withArgs(context.orgA.orgId, context.orgB.bodies.councilBodyId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchAssignMandates", [context.orgA.orgId, [[missingRoleId, context.councilApprover.address, 0n, 0n, 1n << PROPOSAL_TYPE.standard, 0n]]]))
+        .to.be.revertedWithCustomError(context.govCore, "RoleNotFound")
+        .withArgs(missingRoleId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchSetPolicyRules", [context.orgA.orgId, [[PROPOSAL_TYPE.treasury, singleBody(context.orgB.bodies.councilBodyId), [], context.orgA.bodies.councilBodyId, 0n, true]]]))
+        .to.be.revertedWithCustomError(context.govCore, "BodyDoesNotBelongToOrg")
+        .withArgs(context.orgA.orgId, context.orgB.bodies.councilBodyId);
+    });
+
+    it("reverts the whole typed batch when any item fails", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const nextIdBefore: bigint = await nextBodyId(context.govCore);
+      const inputs: BodyCreateInput[] = [
+        [BODY_KIND.generalCouncil, "ipfs://valid-before-failure"],
+        [BODY_KIND.unknown, "ipfs://invalid-kind"],
+      ];
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateBodies", [context.orgA.orgId, inputs]))
+        .to.be.revertedWithCustomError(context.govCore, "InvalidBodyKind");
+      expect(await nextBodyId(context.govCore)).to.equal(nextIdBefore);
+      const revertedBody: BodyView = await readBody(context.govCore, nextIdBefore);
+      expect(revertedBody.orgId).to.equal(0n);
+      expect(revertedBody.active).to.equal(false);
+    });
+  });
+
   it("isolates organizations by orgId", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
     await expect(

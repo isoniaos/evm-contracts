@@ -33,5 +33,6 @@ error InvalidStatusTransition(GovTypes.OrganizationStatus current, GovTypes.Orga
 error InvalidBodyKind();
 error InvalidRoleType();
 error InvalidExecutorBody();
+error EmptyBatch();
 error InvalidExecutionValue(uint256 expected, uint256 actual);
 error ExecutionFailed(bytes reason);

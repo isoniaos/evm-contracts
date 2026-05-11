@@ -109,6 +109,35 @@ library GovTypes {
         bool enabled;
     }
 
+    struct BodyCreateInput {
+        BodyKind kind;
+        string metadataURI;
+    }
+
+    struct RoleCreateInput {
+        uint64 bodyId;
+        RoleType roleType;
+        string metadataURI;
+    }
+
+    struct MandateAssignInput {
+        uint64 roleId;
+        address holder;
+        uint64 startTime;
+        uint64 endTime;
+        uint256 proposalTypeMask;
+        uint128 spendingLimit;
+    }
+
+    struct PolicyRuleSetInput {
+        ProposalType proposalType;
+        uint64[] requiredApprovalBodies;
+        uint64[] vetoBodies;
+        uint64 executorBody;
+        uint64 timelockSeconds;
+        bool enabled;
+    }
+
     struct Proposal {
         uint64 id;
         uint64 orgId;

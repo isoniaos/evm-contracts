@@ -4,10 +4,7 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-Active development target: v0.6 alpha local demo baseline.
-
-This is a metadata-only alignment for the local demo stack. It does not
-change protocol behavior.
+Active development target: v0.7 alpha protocol hardening on top of the v0.6 alpha local demo baseline.
 
 ## Scope
 
@@ -29,11 +26,16 @@ After finalization, mandate and policy changes should move through governance-co
 
 ### Admin Batch Activation
 
-A related future EVM contract upgrade should add typed admin batch functions for bootstrap setup groups. Batches should preserve `msg.sender` as the organization admin and should avoid arbitrary calldata multicall as the first production path.
+The protocol includes typed admin batch functions for bootstrap setup groups:
 
-Preferred shapes include batch create bodies, batch create roles, batch assign mandates, batch set policy rules, or a typed bootstrap activation bundle. Batch activation must emit the same events expected by the Control Plane indexer so read models remain deterministically recoverable from contract events.
+- `batchCreateBodies`
+- `batchCreateRoles`
+- `batchAssignMandates`
+- `batchSetPolicyRules`
 
-These upgrades should be designed together: batch activation reduces setup friction, while bootstrap finalization prevents bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as the reliable v0.6 default, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
+Batches preserve `msg.sender` as the organization admin, avoid arbitrary calldata multicall, and emit the same granular events as the equivalent serial setup calls so Control Plane read models remain deterministically recoverable from contract events. Serial activation remains supported as the compatibility fallback.
+
+Batch activation reduces setup friction, while future bootstrap finalization should prevent bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as fallback, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
 
 ## Local Developer Preview Deployment
 

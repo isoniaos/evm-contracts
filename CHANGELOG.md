@@ -6,6 +6,10 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added typed admin batch activation functions for bootstrap setup actions while preserving granular activation events.
+
 ## [0.6.0-alpha.4]
 
 ### Added
