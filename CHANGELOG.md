@@ -6,13 +6,15 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.2]
+
 ### Added
 
 - Added bootstrap finalization state, event, and read support for organizations.
 
 ### Changed
 
-- Bootstrap admin mutation functions now require organizations to be not finalized.
+- Bootstrap admin mutation functions now require organizations to be not finalized, including existing admin-only body and role updates, mandate revocation, organization status changes, and admin-only proposal cancellation paths.
 
 ## [0.7.0-alpha.1]
 
@@ -70,7 +72,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.1...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.2...HEAD
+[0.7.0-alpha.2]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.1...v0.7.0-alpha.2
 [0.7.0-alpha.1]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.1
 [0.6.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.4
 [0.6.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.3
