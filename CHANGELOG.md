@@ -6,6 +6,14 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added bootstrap finalization state, event, and read support for organizations.
+
+### Changed
+
+- Bootstrap admin mutation functions now require organizations to be not finalized.
+
 ## [0.7.0-alpha.1]
 
 ### Added

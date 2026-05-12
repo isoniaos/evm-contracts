@@ -8,6 +8,7 @@ error EmptySlug();
 error SlugAlreadyExists();
 error OrganizationNotFound(uint64 orgId);
 error OrganizationNotActive(uint64 orgId);
+error OrganizationAlreadyFinalized(uint64 orgId);
 error Unauthorized(address actor);
 error BodyNotFound(uint64 bodyId);
 error BodyDoesNotBelongToOrg(uint64 orgId, uint64 bodyId);

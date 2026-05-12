@@ -184,7 +184,7 @@ contract GovProposals {
         if (!_isCancellableStatus(proposal.status)) {
             revert InvalidProposalStatus(proposal.status);
         }
-        if (govCore.isOrganizationAdmin(orgId, msg.sender)) {
+        if (govCore.isOrganizationAdmin(orgId, msg.sender) && !govCore.isOrganizationFinalized(orgId)) {
             _setProposalStatus(proposal, GovTypes.ProposalStatus.Cancelled);
             emit ProposalCancelled(orgId, proposalId, msg.sender);
             return;

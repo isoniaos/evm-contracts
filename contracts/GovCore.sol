@@ -9,6 +9,7 @@ import {
     SlugAlreadyExists,
     OrganizationNotFound,
     OrganizationNotActive,
+    OrganizationAlreadyFinalized,
     Unauthorized,
     BodyNotFound,
     BodyDoesNotBelongToOrg,
@@ -32,6 +33,7 @@ contract GovCore is IGovCore {
     uint64 public nextMandateId = 1;
 
     mapping(uint64 => GovTypes.Organization) public organizations;
+    mapping(uint64 => bool) private organizationFinalized;
     mapping(bytes32 => bool) public slugExists;
     mapping(uint64 => GovTypes.Body) public bodies;
     mapping(uint64 => GovTypes.Role) public roles;
@@ -46,6 +48,7 @@ contract GovCore is IGovCore {
     event OrganizationCreated(uint64 indexed orgId, string slug, address indexed admin, string metadataURI);
     event OrganizationUpdated(uint64 indexed orgId, string metadataURI);
     event OrganizationStatusChanged(uint64 indexed orgId, GovTypes.OrganizationStatus status);
+    event OrganizationFinalized(uint64 indexed orgId, address indexed admin);
     event BodyCreated(uint64 indexed orgId, uint64 indexed bodyId, GovTypes.BodyKind kind, string metadataURI);
     event BodyUpdated(uint64 indexed orgId, uint64 indexed bodyId, bool active, string metadataURI);
     event RoleCreated(uint64 indexed orgId, uint64 indexed roleId, uint64 indexed bodyId, GovTypes.RoleType roleType, string metadataURI);
@@ -74,25 +77,17 @@ contract GovCore is IGovCore {
     );
 
     modifier onlyOrgAdmin(uint64 orgId) {
-        if (organizations[orgId].id == 0) {
-            revert OrganizationNotFound(orgId);
-        }
-        if (!isOrganizationAdmin(orgId, msg.sender)) {
-            revert Unauthorized(msg.sender);
-        }
+        _requireOrgAdmin(orgId);
         _;
     }
 
     modifier onlyActiveOrgAdmin(uint64 orgId) {
-        if (organizations[orgId].id == 0) {
-            revert OrganizationNotFound(orgId);
-        }
-        if (!isOrganizationActive(orgId)) {
-            revert OrganizationNotActive(orgId);
-        }
-        if (!isOrganizationAdmin(orgId, msg.sender)) {
-            revert Unauthorized(msg.sender);
-        }
+        _requireActiveOrgAdmin(orgId);
+        _;
+    }
+
+    modifier onlyNotFinalized(uint64 orgId) {
+        _requireNotFinalized(orgId);
         _;
     }
 
@@ -133,7 +128,12 @@ contract GovCore is IGovCore {
         emit OrganizationUpdated(orgId, metadataURI);
     }
 
-    function setOrganizationStatus(uint64 orgId, GovTypes.OrganizationStatus status) external onlyOrgAdmin(orgId) {
+    function finalizeOrganization(uint64 orgId) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) {
+        organizationFinalized[orgId] = true;
+        emit OrganizationFinalized(orgId, msg.sender);
+    }
+
+    function setOrganizationStatus(uint64 orgId, GovTypes.OrganizationStatus status) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
         GovTypes.Organization storage organization = organizations[orgId];
         _validateStatusTransition(organization.status, status);
         organization.status = status;
@@ -144,14 +144,14 @@ contract GovCore is IGovCore {
         uint64 orgId,
         GovTypes.BodyKind kind,
         string calldata metadataURI
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64 bodyId) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64 bodyId) {
         bodyId = _createBody(orgId, kind, metadataURI);
     }
 
     function batchCreateBodies(
         uint64 orgId,
         GovTypes.BodyCreateInput[] calldata inputs
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64[] memory bodyIds) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory bodyIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
         bodyIds = new uint64[](inputCount);
@@ -178,7 +178,7 @@ contract GovCore is IGovCore {
         emit BodyCreated(orgId, bodyId, kind, metadataURI);
     }
 
-    function updateBody(uint64 orgId, uint64 bodyId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) {
+    function updateBody(uint64 orgId, uint64 bodyId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
         GovTypes.Body storage body = _requireBodyInOrg(orgId, bodyId);
         body.active = active;
         body.metadataURI = metadataURI;
@@ -190,14 +190,14 @@ contract GovCore is IGovCore {
         uint64 bodyId,
         GovTypes.RoleType roleType,
         string calldata metadataURI
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64 roleId) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64 roleId) {
         roleId = _createRole(orgId, bodyId, roleType, metadataURI);
     }
 
     function batchCreateRoles(
         uint64 orgId,
         GovTypes.RoleCreateInput[] calldata inputs
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64[] memory roleIds) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory roleIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
         roleIds = new uint64[](inputCount);
@@ -230,7 +230,7 @@ contract GovCore is IGovCore {
         emit RoleCreated(orgId, roleId, bodyId, roleType, metadataURI);
     }
 
-    function updateRole(uint64 orgId, uint64 roleId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) {
+    function updateRole(uint64 orgId, uint64 roleId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
         GovTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
         role.active = active;
         role.metadataURI = metadataURI;
@@ -245,14 +245,14 @@ contract GovCore is IGovCore {
         uint64 endTime,
         uint256 proposalTypeMask,
         uint128 spendingLimit
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64 mandateId) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64 mandateId) {
         mandateId = _assignMandate(orgId, roleId, holder, startTime, endTime, proposalTypeMask, spendingLimit);
     }
 
     function batchAssignMandates(
         uint64 orgId,
         GovTypes.MandateAssignInput[] calldata inputs
-    ) external onlyActiveOrgAdmin(orgId) returns (uint64[] memory mandateIds) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory mandateIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
         mandateIds = new uint64[](inputCount);
@@ -305,7 +305,7 @@ contract GovCore is IGovCore {
         emit MandateAssigned(orgId, mandateId, roleId, body.id, holder, startTime, endTime, proposalTypeMask, spendingLimit);
     }
 
-    function revokeMandate(uint64 orgId, uint64 mandateId) external onlyOrgAdmin(orgId) {
+    function revokeMandate(uint64 orgId, uint64 mandateId) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
         GovTypes.Mandate storage mandate = _requireMandateInOrg(orgId, mandateId);
         if (mandate.revoked) {
             revert Unauthorized(msg.sender);
@@ -323,14 +323,14 @@ contract GovCore is IGovCore {
         uint64 executorBody,
         uint64 timelockSeconds,
         bool enabled
-    ) external onlyActiveOrgAdmin(orgId) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) {
         _setPolicyRule(orgId, proposalType, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
     }
 
     function batchSetPolicyRules(
         uint64 orgId,
         GovTypes.PolicyRuleSetInput[] calldata inputs
-    ) external onlyActiveOrgAdmin(orgId) {
+    ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
         for (uint256 index = 0; index < inputCount; index++) {
@@ -388,6 +388,10 @@ contract GovCore is IGovCore {
     function isOrganizationActive(uint64 orgId) public view returns (bool isActive) {
         GovTypes.Organization storage organization = organizations[orgId];
         isActive = organization.id != 0 && organization.status == GovTypes.OrganizationStatus.Active;
+    }
+
+    function isOrganizationFinalized(uint64 orgId) public view returns (bool isFinalized) {
+        isFinalized = organizationFinalized[orgId];
     }
 
     function isOrganizationAdmin(uint64 orgId, address actor) public view returns (bool isAdmin) {
@@ -539,6 +543,35 @@ contract GovCore is IGovCore {
             return false;
         }
         isValid = true;
+    }
+
+    function _requireOrgAdmin(uint64 orgId) internal view {
+        GovTypes.Organization storage organization = organizations[orgId];
+        if (organization.id == 0) {
+            revert OrganizationNotFound(orgId);
+        }
+        if (organization.admin != msg.sender) {
+            revert Unauthorized(msg.sender);
+        }
+    }
+
+    function _requireActiveOrgAdmin(uint64 orgId) internal view {
+        GovTypes.Organization storage organization = organizations[orgId];
+        if (organization.id == 0) {
+            revert OrganizationNotFound(orgId);
+        }
+        if (organization.status != GovTypes.OrganizationStatus.Active) {
+            revert OrganizationNotActive(orgId);
+        }
+        if (organization.admin != msg.sender) {
+            revert Unauthorized(msg.sender);
+        }
+    }
+
+    function _requireNotFinalized(uint64 orgId) internal view {
+        if (organizationFinalized[orgId]) {
+            revert OrganizationAlreadyFinalized(orgId);
+        }
     }
 
     function _requireBodyInOrg(uint64 orgId, uint64 bodyId) internal view returns (GovTypes.Body storage body) {

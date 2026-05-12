@@ -145,6 +145,12 @@ async function readBigInt(contract: DeployedContract, methodName: string, args: 
   return result as bigint;
 }
 
+async function readBoolean(contract: DeployedContract, methodName: string, args: readonly unknown[] = []): Promise<boolean> {
+  const method = contract.getFunction(methodName);
+  const result: unknown = await method(...args);
+  return result as boolean;
+}
+
 async function invoke(contract: DeployedContract, methodName: string, args: readonly unknown[] = []): Promise<void> {
   const method = contract.getFunction(methodName);
   await method(...args);
@@ -198,14 +204,20 @@ async function createRole(govCore: DeployedContract, admin: SignerWithAddress, o
   return roleId;
 }
 
-async function assignMandate(govCore: DeployedContract, admin: SignerWithAddress, orgId: bigint, roleId: bigint, holder: SignerWithAddress, proposalType: bigint): Promise<void> {
+async function assignMandate(govCore: DeployedContract, admin: SignerWithAddress, orgId: bigint, roleId: bigint, holder: SignerWithAddress, proposalType: bigint): Promise<bigint> {
+  const mandateId: bigint = await nextMandateId(govCore);
   const proposalTypeMask: bigint = 1n << proposalType;
   await invoke(govCore.connect(admin), "assignMandate", [orgId, roleId, holder.address, 0, 0, proposalTypeMask, 0]);
+  return mandateId;
 }
 
 async function grantRole(govCore: DeployedContract, admin: SignerWithAddress, orgId: bigint, bodyId: bigint, roleType: bigint, holder: SignerWithAddress, proposalType: bigint, metadataUri: string): Promise<void> {
   const roleId: bigint = await createRole(govCore, admin, orgId, bodyId, roleType, metadataUri);
   await assignMandate(govCore, admin, orgId, roleId, holder, proposalType);
+}
+
+async function finalizeOrganization(govCore: DeployedContract, admin: SignerWithAddress, orgId: bigint): Promise<void> {
+  await invoke(govCore.connect(admin), "finalizeOrganization", [orgId]);
 }
 
 async function createOrgContext(govCore: DeployedContract, admin: SignerWithAddress, slug: string): Promise<OrgContext> {
@@ -452,6 +464,138 @@ describe("Protocol v0.1", function () {
       const revertedBody: BodyView = await readBody(context.govCore, nextIdBefore);
       expect(revertedBody.orgId).to.equal(0n);
       expect(revertedBody.active).to.equal(false);
+    });
+  });
+
+  describe("bootstrap finalization", function () {
+    it("allows the bootstrap admin to finalize an active organization and emits the finalization event", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const finalize = context.govCore.connect(context.orgAdminA).getFunction("finalizeOrganization");
+
+      expect(await readBoolean(context.govCore, "isOrganizationFinalized", [context.orgA.orgId])).to.equal(false);
+      await expect(finalize(context.orgA.orgId))
+        .to.emit(context.govCore, "OrganizationFinalized")
+        .withArgs(context.orgA.orgId, context.orgAdminA.address);
+
+      expect(await readBoolean(context.govCore, "isOrganizationFinalized", [context.orgA.orgId])).to.equal(true);
+      expect(await readBoolean(context.govCore, "isOrganizationActive", [context.orgA.orgId])).to.equal(true);
+    });
+
+    it("rejects finalization from a non-admin caller", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+
+      await expect(invoke(context.govCore.connect(context.outsider), "finalizeOrganization", [context.orgA.orgId]))
+        .to.be.revertedWithCustomError(context.govCore, "Unauthorized")
+        .withArgs(context.outsider.address);
+    });
+
+    it("rejects repeated finalization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "finalizeOrganization", [context.orgA.orgId]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+    });
+
+    it("rejects finalization for a nonexistent organization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const missingOrgId = 99_999n;
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "finalizeOrganization", [missingOrgId]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationNotFound")
+        .withArgs(missingOrgId);
+    });
+
+    it("blocks serial bootstrap configuration after finalization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const preFinalizationRoleId: bigint = await createRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://pre-finalization-role");
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "createBody", [context.orgA.orgId, BODY_KIND.generalCouncil, "ipfs://blocked-body"]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "createRole", [context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://blocked-role"]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "assignMandate", [context.orgA.orgId, preFinalizationRoleId, context.outsider.address, 0n, 0n, 1n << PROPOSAL_TYPE.standard, 0n]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "setPolicyRule", [context.orgA.orgId, PROPOSAL_TYPE.standard, singleBody(context.orgA.bodies.councilBodyId), [], context.orgA.bodies.councilBodyId, 0n, true]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+    });
+
+    it("blocks typed batch bootstrap configuration after finalization without partial execution", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const preFinalizationRoleId: bigint = await createRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://pre-finalization-batch-role");
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+      const nextBodyIdBefore: bigint = await nextBodyId(context.govCore);
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateBodies", [context.orgA.orgId, [[BODY_KIND.generalCouncil, "ipfs://blocked-batch-body"]]]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchCreateRoles", [context.orgA.orgId, [[context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://blocked-batch-role"]]]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchAssignMandates", [context.orgA.orgId, [[preFinalizationRoleId, context.outsider.address, 0n, 0n, 1n << PROPOSAL_TYPE.standard, 0n]]]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "batchSetPolicyRules", [context.orgA.orgId, [[PROPOSAL_TYPE.standard, singleBody(context.orgA.bodies.councilBodyId), [], context.orgA.bodies.councilBodyId, 0n, true]]]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      expect(await nextBodyId(context.govCore)).to.equal(nextBodyIdBefore);
+    });
+
+    it("keeps read-only governance getters available after finalization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const roleId: bigint = await createRole(context.govCore, context.orgAdminB, context.orgB.orgId, context.orgB.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://finalized-readable-role");
+      const mandateId: bigint = await assignMandate(context.govCore, context.orgAdminB, context.orgB.orgId, roleId, context.treasuryApprover, PROPOSAL_TYPE.standard);
+      await invoke(context.govCore.connect(context.orgAdminB), "setPolicyRule", [context.orgB.orgId, PROPOSAL_TYPE.standard, singleBody(context.orgB.bodies.councilBodyId), [], context.orgB.bodies.councilBodyId, 0n, true]);
+      await finalizeOrganization(context.govCore, context.orgAdminB, context.orgB.orgId);
+
+      const body: BodyView = await readBody(context.govCore, context.orgB.bodies.councilBodyId);
+      const role: RoleView = await readRole(context.govCore, roleId);
+      const mandate: MandateView = await readMandate(context.govCore, mandateId);
+      const rule: PolicyRuleView = await readPolicyRule(context.govCore, context.orgB.orgId, PROPOSAL_TYPE.standard);
+      const canApprove: boolean = await readBoolean(context.govCore, "canActOnProposalType", [context.orgB.orgId, context.treasuryApprover.address, context.orgB.bodies.councilBodyId, ROLE_TYPE.approver, PROPOSAL_TYPE.standard]);
+
+      expect(body.orgId).to.equal(context.orgB.orgId);
+      expect(role.orgId).to.equal(context.orgB.orgId);
+      expect(mandate.orgId).to.equal(context.orgB.orgId);
+      expect(rule.enabled).to.equal(true);
+      expect(canApprove).to.equal(true);
+      expect(await readBoolean(context.govCore, "isOrganizationFinalized", [context.orgB.orgId])).to.equal(true);
+    });
+
+    it("blocks remaining bootstrap admin escape paths after finalization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const roleId: bigint = await createRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.approver, "ipfs://escape-path-role");
+      const mandateId: bigint = await assignMandate(context.govCore, context.orgAdminA, context.orgA.orgId, roleId, context.treasuryApprover, PROPOSAL_TYPE.standard);
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "updateBody", [context.orgA.orgId, context.orgA.bodies.councilBodyId, false, "ipfs://blocked-body-update"]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "updateRole", [context.orgA.orgId, roleId, false, "ipfs://blocked-role-update"]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "revokeMandate", [context.orgA.orgId, mandateId]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govCore.connect(context.orgAdminA), "setOrganizationStatus", [context.orgA.orgId, 2n]))
+        .to.be.revertedWithCustomError(context.govCore, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+    });
+
+    it("does not leave proposal cancellation as a post-finalization admin override", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+      const proposal = await createProposal(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), 909n);
+
+      await expect(invoke(context.govProposals.connect(context.orgAdminA), "cancelProposal", [context.orgA.orgId, proposal.proposalId]))
+        .to.be.revertedWithCustomError(context.govProposals, "Unauthorized")
+        .withArgs(context.orgAdminA.address);
     });
   });
 

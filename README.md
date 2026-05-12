@@ -16,17 +16,19 @@ Active development target: v0.7 alpha protocol hardening on top of the v0.6 alph
 - policy rules
 - proposal lifecycle
 
-## Future Protocol Backlog
+## Protocol Notes
 
 ### Bootstrap Finalization and Admin Handoff
 
-The v0.6 alpha contracts use the organization admin as bootstrap authority. A future protocol upgrade should add explicit bootstrap finalization so the admin can complete setup and then lose unilateral power over roles, mandates, and policy rules.
+The v0.7 alpha protocol includes explicit bootstrap finalization. The organization admin can complete setup, review the activated structure, and call `finalizeOrganization(orgId)` to end bootstrap authority for governance-critical configuration.
 
-After finalization, mandate and policy changes should move through governance-controlled proposals and routes, or through narrowly scoped role authority such as `BodyAdmin` where the contract model grants it. Contracts remain authoritative for governance power.
+Finalization is irreversible in this alpha and emits `OrganizationFinalized`. `isOrganizationFinalized(orgId)` exposes the on-chain finalization state while existing read paths remain available.
+
+After finalization, bootstrap admin mutation functions are blocked for bodies, roles, mandates, policy rules, typed batch activation, and the existing admin-only configuration/update paths. Future emergency/recovery and governance-controlled post-finalization configuration changes remain open design areas and are not implemented here.
 
 ### Admin Batch Activation
 
-The protocol includes typed admin batch functions for bootstrap setup groups:
+The v0.7 alpha protocol also includes typed admin batch functions for bootstrap setup groups:
 
 - `batchCreateBodies`
 - `batchCreateRoles`
@@ -35,7 +37,9 @@ The protocol includes typed admin batch functions for bootstrap setup groups:
 
 Batches preserve `msg.sender` as the organization admin, avoid arbitrary calldata multicall, and emit the same granular events as the equivalent serial setup calls so Control Plane read models remain deterministically recoverable from contract events. Serial activation remains supported as the compatibility fallback.
 
-Batch activation reduces setup friction, while future bootstrap finalization should prevent bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as fallback, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
+Batch activation reduces setup friction, while bootstrap finalization prevents bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as fallback, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
+
+These alpha contracts are not production audited and should not be described as production-ready governance infrastructure.
 
 ## Local Developer Preview Deployment
 
