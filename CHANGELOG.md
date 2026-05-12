@@ -10,6 +10,10 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 - Added typed admin batch activation functions for bootstrap setup actions while preserving granular activation events.
 
+### Changed
+
+- Standardized simple `GovCore` and `DemoTarget` entry-point guards as Solidity modifiers.
+
 ## [0.6.0-alpha.4]
 
 ### Added

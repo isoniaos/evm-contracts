@@ -13,6 +13,20 @@ contract DemoTarget {
     event GovProposalsSet(address indexed govProposalsAddress);
     event NumberSet(uint64 indexed orgId, uint256 number, uint256 value);
 
+    modifier onlyOwner() {
+        if (msg.sender != owner) {
+            revert Unauthorized(msg.sender);
+        }
+        _;
+    }
+
+    modifier onlyGovProposals() {
+        if (msg.sender != govProposals) {
+            revert Unauthorized(msg.sender);
+        }
+        _;
+    }
+
     constructor(address ownerAddress) {
         if (ownerAddress == address(0)) {
             revert ZeroAddress();
@@ -20,10 +34,7 @@ contract DemoTarget {
         owner = ownerAddress;
     }
 
-    function setGovProposals(address govProposalsAddress) external {
-        if (msg.sender != owner) {
-            revert Unauthorized(msg.sender);
-        }
+    function setGovProposals(address govProposalsAddress) external onlyOwner {
         if (govProposalsAddress == address(0)) {
             revert ZeroAddress();
         }
@@ -31,10 +42,7 @@ contract DemoTarget {
         emit GovProposalsSet(govProposalsAddress);
     }
 
-    function setNumber(uint64 orgId, uint256 newNumber) external payable {
-        if (msg.sender != govProposals) {
-            revert Unauthorized(msg.sender);
-        }
+    function setNumber(uint64 orgId, uint256 newNumber) external payable onlyGovProposals {
         lastOrgId = orgId;
         number = newNumber;
         lastActionHash = keccak256(msg.data);
