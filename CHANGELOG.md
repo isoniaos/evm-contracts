@@ -6,6 +6,12 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.3]
+
+### Changed
+
+- Removed historical deploy and seed script aliases in favor of the canonical `deploy:local` and `seed:local` commands.
+
 ## [0.7.0-alpha.2]
 
 ### Added
@@ -72,8 +78,9 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.2...HEAD
-[0.7.0-alpha.2]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.1...v0.7.0-alpha.2
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.3...HEAD
+[0.7.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.3
+[0.7.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.2
 [0.7.0-alpha.1]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.1
 [0.6.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.4
 [0.6.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.6.0-alpha.3
