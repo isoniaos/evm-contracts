@@ -6,6 +6,12 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.4]
+
+### Changed
+
+- Fixed seed address resolution.
+
 ## [0.7.0-alpha.3]
 
 ### Changed
@@ -78,7 +84,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.3...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...HEAD
+[0.7.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.4
 [0.7.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.3
 [0.7.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.2
 [0.7.0-alpha.1]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.1
