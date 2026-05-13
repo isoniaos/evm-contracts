@@ -58,11 +58,32 @@ corepack pnpm deploy:local
 Seed the Simple DAO+ and Bicameral preview topologies:
 
 ```txt
+corepack pnpm seed:local
+```
+
+`seed:local` reads the current chain's Ignition deployment file, such as `ignition/deployments/chain-31337/deployed_addresses.json`, and seeds those existing contracts. The `contracts` addresses printed by `seed:local` must match the Ignition deployed addresses.
+
+Optional explicit address mode is available when seeding a known contract set directly.
+
+PowerShell:
+
+```txt
+$env:GOV_CORE_ADDRESS = "0x..."
+$env:GOV_PROPOSALS_ADDRESS = "0x..."
+$env:DEMO_TARGET_ADDRESS = "0x..."
+corepack pnpm seed:local
+```
+
+cmd.exe:
+
+```txt
 set GOV_CORE_ADDRESS=0x...
 set GOV_PROPOSALS_ADDRESS=0x...
 set DEMO_TARGET_ADDRESS=0x...
 corepack pnpm seed:local
 ```
+
+All three explicit address variables must be set together. If no explicit addresses are set and no Ignition deployment file exists for the current chain, run `corepack pnpm deploy:local` first.
 
 Set balance in your browser wallet:
 

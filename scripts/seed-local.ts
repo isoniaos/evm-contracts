@@ -1,4 +1,5 @@
 import { network } from "hardhat";
+import { resolveSeedContractAddresses } from "./seed-local-addresses.js";
 
 const { ethers } = await network.getOrCreate();
 
@@ -31,7 +32,7 @@ function mask(proposalType: bigint): bigint {
 
 async function main(): Promise<void> {
   const [deployer, simpleAdmin, bicameralAdmin, proposer, approverA, approverB, vetoer, executor] = await ethers.getSigners();
-  const { govCore, govProposals, demoTarget } = await resolveProtocolContracts(deployer.address);
+  const { govCore, govProposals, demoTarget } = await resolveProtocolContracts();
 
   const simple = await createSimpleDaoPlus({
     govCore,
@@ -157,26 +158,13 @@ async function createDemoProposal(govProposals: any, demoTarget: any, proposer: 
 
 await main();
 
-async function resolveProtocolContracts(ownerAddress: string) {
-  const govCoreAddress = process.env.GOV_CORE_ADDRESS;
-  const govProposalsAddress = process.env.GOV_PROPOSALS_ADDRESS;
-  const demoTargetAddress = process.env.DEMO_TARGET_ADDRESS;
+async function resolveProtocolContracts() {
+  const networkInfo = await ethers.provider.getNetwork();
+  const addresses = resolveSeedContractAddresses({ chainId: networkInfo.chainId });
 
-  if (govCoreAddress && govProposalsAddress && demoTargetAddress) {
-    return {
-      govCore: await ethers.getContractAt("GovCore", govCoreAddress),
-      govProposals: await ethers.getContractAt("GovProposals", govProposalsAddress),
-      demoTarget: await ethers.getContractAt("DemoTarget", demoTargetAddress),
-    };
-  }
-
-  if (govCoreAddress || govProposalsAddress || demoTargetAddress) {
-    throw new Error("Set all of GOV_CORE_ADDRESS, GOV_PROPOSALS_ADDRESS, and DEMO_TARGET_ADDRESS, or leave all unset for deploy-and-seed mode.");
-  }
-
-  const govCore = await ethers.deployContract("GovCore");
-  const demoTarget = await ethers.deployContract("DemoTarget", [ownerAddress]);
-  const govProposals = await ethers.deployContract("GovProposals", [await govCore.getAddress(), await demoTarget.getAddress()]);
-  await (await demoTarget.setGovProposals(await govProposals.getAddress())).wait();
-  return { govCore, govProposals, demoTarget };
+  return {
+    govCore: await ethers.getContractAt("GovCore", addresses.govCore),
+    govProposals: await ethers.getContractAt("GovProposals", addresses.govProposals),
+    demoTarget: await ethers.getContractAt("DemoTarget", addresses.demoTarget),
+  };
 }
