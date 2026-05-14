@@ -46,12 +46,17 @@ These alpha contracts are not production audited and should not be described as 
 Start a local Hardhat node:
 
 ```txt
-corepack pnpm hardhat node --hostname 127.0.0.1 --port 8545
+corepack pnpm node:local
 ```
 
-The local node is quiet by default so wallet/provider simulation reverts do not
-dominate demo logs. Set `HARDHAT_VERBOSE_LOGS=true` before starting the node to
-restore Hardhat request logging while debugging RPC or EVM failures.
+The `node:local` script starts the Hardhat 3 local node with the configured
+`hardhatMainnet` simulated network. Hardhat's node task enables request logging
+for the JSON-RPC server, so normal mode turns that request logging back off
+after startup. Wallet/provider simulation reverts do not dominate demo output.
+Set `HARDHAT_VERBOSE_LOGS=true` before starting the node to preserve verbose
+Hardhat request logs while debugging RPC or EVM failures. This setting changes
+only local node console logging; it does not change contract behavior or relax
+transaction/call failure semantics.
 
 Deploy protocol contracts with Ignition:
 

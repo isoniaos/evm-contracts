@@ -6,6 +6,15 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.6]
+
+### Changed
+
+- Added a canonical `node:local` script that starts the Hardhat local node with
+  the configured `hardhatMainnet` simulated network selected explicitly.
+- Disabled Hardhat node request logging after startup in normal local mode,
+  while preserving `HARDHAT_VERBOSE_LOGS=true` as the verbose debugging path.
+
 ## [0.7.0-alpha.5]
 
 ### Changed
@@ -90,7 +99,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.5...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.6...HEAD
+[0.7.0-alpha.6]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.5...v0.7.0-alpha.6
 [0.7.0-alpha.5]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...v0.7.0-alpha.5
 [0.7.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.4
 [0.7.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.3

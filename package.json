@@ -1,9 +1,10 @@
 {
   "name": "@isonia/evm-contracts",
-  "version": "0.7.0-alpha.5",
+  "version": "0.7.0-alpha.6",
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "node:local": "node scripts/start-local-node.mjs",
     "test": "hardhat test",
     "deploy:local": "hardhat ignition deploy ignition/modules/IsoniaProtocolV01.ts --network localhost",
     "seed:local": "hardhat run scripts/seed-local.ts --network localhost"
