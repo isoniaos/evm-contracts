@@ -1,6 +1,8 @@
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import { configVariable, defineConfig } from "hardhat/config";
 
+const hardhatRequestLoggingEnabled = process.env.HARDHAT_VERBOSE_LOGS === "true";
+
 export default defineConfig({
   plugins: [hardhatToolboxMochaEthersPlugin],
   solidity: {
@@ -27,10 +29,12 @@ export default defineConfig({
     hardhatMainnet: {
       type: "edr-simulated",
       chainType: "l1",
+      loggingEnabled: hardhatRequestLoggingEnabled,
     },
     hardhatOp: {
       type: "edr-simulated",
       chainType: "op",
+      loggingEnabled: hardhatRequestLoggingEnabled,
     },
     localhost: {
       type: "http",

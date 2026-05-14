@@ -6,6 +6,12 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.5]
+
+### Changed
+
+- Made local Hardhat node request logging quiet by default, with `HARDHAT_VERBOSE_LOGS=true` available for debugging.
+
 ## [0.7.0-alpha.4]
 
 ### Changed
@@ -84,7 +90,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.5...HEAD
+[0.7.0-alpha.5]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...v0.7.0-alpha.5
 [0.7.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.4
 [0.7.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.3
 [0.7.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.2

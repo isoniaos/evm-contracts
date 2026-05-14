@@ -49,6 +49,10 @@ Start a local Hardhat node:
 corepack pnpm hardhat node --hostname 127.0.0.1 --port 8545
 ```
 
+The local node is quiet by default so wallet/provider simulation reverts do not
+dominate demo logs. Set `HARDHAT_VERBOSE_LOGS=true` before starting the node to
+restore Hardhat request logging while debugging RPC or EVM failures.
+
 Deploy protocol contracts with Ignition:
 
 ```txt
