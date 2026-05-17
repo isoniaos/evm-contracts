@@ -1,6 +1,16 @@
 # IsoniaOS Agent Rules
 
-Current active target: v0.6 alpha.
+Current active target: v0.8 alpha accountability demo baseline.
+
+The v0.8 contracts scope is a deterministic local accountability demo surface:
+
+- preserve the v0.7 custom IsoniaOS organization/proposal protocol;
+- keep `GovProposals` execution limited to the configured demo target;
+- keep demo target actions `onlyGovProposals`;
+- use demo target events as local onchain proof that a governed target method executed;
+- keep `IsoDemoVotesToken` demo-only if present.
+
+Do not treat demo target events as proof that external work was completed. Do not treat the demo votes token as ISO launch tokenomics or production governance eligibility.
 
 Do:
 

@@ -6,6 +6,20 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.8.0-alpha.1]
+
+### Added
+
+- Extended `DemoTarget` with v0.8 governed accountability actions and events for feature flags, uint parameters, native payment release, obligation acceptance, and obligation cancellation.
+- Added demo-only `IsoDemoVotesToken` with ERC20Votes-style delegation and historical voting power for local DAO-process simulation.
+- Added tests for v0.8 target caller guards, proposal-executed proof events, native value release, zero-recipient rejection, and demo votes delegation history.
+
+### Changed
+
+- Updated the Ignition deployment module to deploy and return the demo votes token alongside the existing protocol contracts.
+- Updated local seeding to include an executed v0.8 accountability action, an approved-but-not-executed obligation action, and optional demo votes token mint/delegation output.
+- Bumped package version to `0.8.0-alpha.1`.
+
 ## [0.7.0-alpha.6]
 
 ### Changed
@@ -99,7 +113,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.6...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.1...HEAD
+[0.8.0-alpha.1]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.6...v0.8.0-alpha.1
 [0.7.0-alpha.6]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.5...v0.7.0-alpha.6
 [0.7.0-alpha.5]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...v0.7.0-alpha.5
 [0.7.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.7.0-alpha.4

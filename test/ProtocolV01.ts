@@ -119,6 +119,11 @@ function createAction(demoTarget: DeployedContract, orgId: bigint, number: bigin
   return { actionData, dataHash: ethers.keccak256(actionData) };
 }
 
+function createTargetAction(demoTarget: DeployedContract, methodName: string, args: readonly unknown[]): { actionData: string; dataHash: string } {
+  const actionData: string = demoTarget.interface.encodeFunctionData(methodName, args);
+  return { actionData, dataHash: ethers.keccak256(actionData) };
+}
+
 async function nextOrgId(govCore: DeployedContract): Promise<bigint> {
   return readBigInt(govCore, "nextOrgId");
 }
@@ -244,11 +249,21 @@ async function configureMandates(context: ProtocolContext): Promise<void> {
   await grantRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.executor, context.executor, PROPOSAL_TYPE.treasury, "ipfs://treasury-executor");
 }
 
-async function createProposal(context: ProtocolContext, proposalType: bigint, target: string, number: bigint): Promise<{ proposalId: bigint; actionData: string; dataHash: string }> {
+async function createProposalForAction(
+  context: ProtocolContext,
+  proposalType: bigint,
+  target: string,
+  action: { actionData: string; dataHash: string },
+  value: bigint = 0n,
+): Promise<{ proposalId: bigint; actionData: string; dataHash: string; value: bigint }> {
   const proposalId: bigint = await nextProposalId(context.govProposals);
+  await invoke(context.govProposals.connect(context.proposer), "createProposal", [context.orgA.orgId, proposalType, target, value, action.dataHash, `ipfs://proposal-${proposalId}`]);
+  return { proposalId, actionData: action.actionData, dataHash: action.dataHash, value };
+}
+
+async function createProposal(context: ProtocolContext, proposalType: bigint, target: string, number: bigint): Promise<{ proposalId: bigint; actionData: string; dataHash: string; value: bigint }> {
   const action = createAction(context.demoTarget, context.orgA.orgId, number);
-  await invoke(context.govProposals.connect(context.proposer), "createProposal", [context.orgA.orgId, proposalType, target, 0, action.dataHash, `ipfs://proposal-${proposalId}`]);
-  return { proposalId, actionData: action.actionData, dataHash: action.dataHash };
+  return createProposalForAction(context, proposalType, target, action);
 }
 
 async function approveTreasury(context: ProtocolContext, proposalId: bigint): Promise<void> {
@@ -618,6 +633,98 @@ describe("Protocol v0.1", function () {
     expect(proposalState.status).to.equal(PROPOSAL_STATUS.executed);
     expect(await readBigInt(context.demoTarget, "number")).to.equal(77n);
     expect(await readBigInt(context.demoTarget, "lastOrgId")).to.equal(context.orgA.orgId);
+  });
+
+  describe("v0.8 accountability demo target", function () {
+    it("rejects direct calls to governed target methods from non-GovProposals actors", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const feature = ethers.id("feature:v0.8:archive");
+      const key = ethers.id("param:v0.8:max-review-days");
+      const obligationId = ethers.id("obligation:v0.8:direct-guard");
+
+      await expect(invoke(context.demoTarget.connect(context.outsider), "setFeatureEnabled", [context.orgA.orgId, feature, true]))
+        .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
+        .withArgs(context.outsider.address);
+      await expect(invoke(context.demoTarget.connect(context.outsider), "setUintParam", [context.orgA.orgId, key, 7n]))
+        .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
+        .withArgs(context.outsider.address);
+      const releaseNativePayment = context.demoTarget.connect(context.outsider).getFunction("releaseNativePayment");
+      await expect(releaseNativePayment(context.orgA.orgId, obligationId, context.executor.address, { value: 1n }))
+        .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
+        .withArgs(context.outsider.address);
+      await expect(invoke(context.demoTarget.connect(context.outsider), "markObligationAccepted", [context.orgA.orgId, obligationId]))
+        .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
+        .withArgs(context.outsider.address);
+      await expect(invoke(context.demoTarget.connect(context.outsider), "markObligationCancelled", [context.orgA.orgId, obligationId, "scope changed"]))
+        .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
+        .withArgs(context.outsider.address);
+    });
+
+    it("executes a feature flag proposal and emits proof events", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const feature = ethers.id("feature:v0.8:public-archive");
+      const action = createTargetAction(context.demoTarget, "setFeatureEnabled", [context.orgA.orgId, feature, true]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+        .to.emit(context.demoTarget, "FeatureEnabledSet")
+        .withArgs(context.orgA.orgId, feature, true)
+        .and.to.emit(context.govProposals, "ProposalExecuted")
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+
+      expect(await readBoolean(context.demoTarget, "featureEnabled", [context.orgA.orgId, feature])).to.equal(true);
+      const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
+      expect(proposalState.status).to.equal(PROPOSAL_STATUS.executed);
+    });
+
+    it("executes an obligation acceptance proposal and emits the obligation event", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const obligationId = ethers.id("obligation:v0.8:accepted");
+      const action = createTargetAction(context.demoTarget, "markObligationAccepted", [context.orgA.orgId, obligationId]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+        .to.emit(context.demoTarget, "ObligationAccepted")
+        .withArgs(context.orgA.orgId, obligationId)
+        .and.to.emit(context.govProposals, "ProposalExecuted")
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+
+      expect(await readBoolean(context.demoTarget, "obligationAccepted", [context.orgA.orgId, obligationId])).to.equal(true);
+    });
+
+    it("releases native value through proposal execution and emits the payment event", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const obligationId = ethers.id("obligation:v0.8:native-payment");
+      const payment = ethers.parseEther("0.05");
+      const action = createTargetAction(context.demoTarget, "releaseNativePayment", [context.orgA.orgId, obligationId, context.outsider.address]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action, payment);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const recipientBalanceBefore = await ethers.provider.getBalance(context.outsider.address);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData, { value: payment }))
+        .to.emit(context.demoTarget, "NativePaymentReleased")
+        .withArgs(context.orgA.orgId, obligationId, context.outsider.address, payment)
+        .and.to.emit(context.govProposals, "ProposalExecuted")
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+
+      expect(await ethers.provider.getBalance(context.outsider.address)).to.equal(recipientBalanceBefore + payment);
+    });
+
+    it("rejects a zero recipient for native payment release", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const obligationId = ethers.id("obligation:v0.8:zero-recipient");
+      const standaloneTarget = await ethers.deployContract("DemoTarget", [context.orgAdminA.address]) as unknown as DeployedContract;
+      await invoke(standaloneTarget.connect(context.orgAdminA), "setGovProposals", [context.executor.address]);
+      const releaseNativePayment = standaloneTarget.connect(context.executor).getFunction("releaseNativePayment");
+
+      await expect(releaseNativePayment(context.orgA.orgId, obligationId, ethers.ZeroAddress))
+        .to.be.revertedWithCustomError(standaloneTarget, "ZeroAddress");
+    });
   });
 
   it("enforces treasury timelock before execution", async function (): Promise<void> {

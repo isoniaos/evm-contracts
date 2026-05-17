@@ -4,7 +4,7 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-Active development target: v0.7 alpha protocol hardening on top of the v0.6 alpha local demo baseline.
+Active development target: v0.8 alpha accountability demo baseline on top of the v0.7 protocol hardening foundation.
 
 ## Scope
 
@@ -15,8 +15,29 @@ Active development target: v0.7 alpha protocol hardening on top of the v0.6 alph
 - mandates
 - policy rules
 - proposal lifecycle
+- deterministic local proof-of-execution events for demo accountability flows
 
 ## Protocol Notes
+
+### v0.8 Accountability Demo Target
+
+`DemoTarget` remains the only target address allowed by `GovProposals` execution in this alpha. It is intentionally a local/demo target, not a production treasury or external integration authority.
+
+The v0.8 demo target preserves the existing `setNumber(uint64 orgId, uint256 newNumber)` path and adds governed actions for local accountability scenarios:
+
+- `setFeatureEnabled(uint64 orgId, bytes32 feature, bool enabled)`
+- `setUintParam(uint64 orgId, bytes32 key, uint256 value)`
+- `releaseNativePayment(uint64 orgId, bytes32 obligationId, address payable recipient)`
+- `markObligationAccepted(uint64 orgId, bytes32 obligationId)`
+- `markObligationCancelled(uint64 orgId, bytes32 obligationId, string reason)`
+
+These methods emit deterministic events that downstream read models can later map into proposal history, execution state, obligation references, linked transaction hashes, and public proof-of-execution displays. They prove that the local governed target method executed onchain; they do not prove that external work, manual evidence, or offchain integrations are complete.
+
+### Demo Votes Token
+
+`IsoDemoVotesToken` is a demo-only ERC20Votes-style token deployed by the local Ignition module for future local DAO-process simulation. It supports owner-only demo minting, delegation, current votes, and historical votes.
+
+This token is not the ISO launch token and does not implement bonding curves, fees, transfer taxes, reserves, identity checks, whale premiums, governance activation, or production voting eligibility.
 
 ### Bootstrap Finalization and Admin Handoff
 
@@ -72,6 +93,8 @@ corepack pnpm seed:local
 
 `seed:local` reads the current chain's Ignition deployment file, such as `ignition/deployments/chain-31337/deployed_addresses.json`, and seeds those existing contracts. The `contracts` addresses printed by `seed:local` must match the Ignition deployed addresses.
 
+The local v0.8 seed also creates one approved-and-executed accountability demo action and one approved-but-not-executed obligation action. If the Ignition deployment includes `IsoDemoVotesToken`, `seed:local` mints demo votes to deterministic sample actors and self-delegates them for local simulation.
+
 Optional explicit address mode is available when seeding a known contract set directly.
 
 PowerShell:
@@ -93,6 +116,8 @@ corepack pnpm seed:local
 ```
 
 All three explicit address variables must be set together. If no explicit addresses are set and no Ignition deployment file exists for the current chain, run `corepack pnpm deploy:local` first.
+
+`DEMO_VOTES_TOKEN_ADDRESS` may also be provided when explicit address mode is used, but it is optional and does not replace the required protocol addresses.
 
 Set balance in your browser wallet:
 

@@ -7,12 +7,14 @@ const IGNITION_ADDRESS_KEYS = {
   govCore: "IsoniaProtocolV01Module#GovCore",
   govProposals: "IsoniaProtocolV01Module#GovProposals",
   demoTarget: "IsoniaProtocolV01Module#DemoTarget",
+  demoVotesToken: "IsoniaProtocolV01Module#IsoDemoVotesToken",
 } as const;
 
 export interface SeedAddressEnv {
   readonly GOV_CORE_ADDRESS?: string;
   readonly GOV_PROPOSALS_ADDRESS?: string;
   readonly DEMO_TARGET_ADDRESS?: string;
+  readonly DEMO_VOTES_TOKEN_ADDRESS?: string;
 }
 
 export interface ResolveSeedContractAddressesOptions {
@@ -25,6 +27,7 @@ export interface SeedContractAddresses {
   readonly govCore: string;
   readonly govProposals: string;
   readonly demoTarget: string;
+  readonly demoVotesToken?: string;
   readonly source: "env" | "ignition";
   readonly ignitionDeploymentFile?: string;
 }
@@ -35,15 +38,22 @@ export function resolveSeedContractAddresses(options: ResolveSeedContractAddress
     govCore: normalizeAddress(env.GOV_CORE_ADDRESS),
     govProposals: normalizeAddress(env.GOV_PROPOSALS_ADDRESS),
     demoTarget: normalizeAddress(env.DEMO_TARGET_ADDRESS),
+    demoVotesToken: normalizeAddress(env.DEMO_VOTES_TOKEN_ADDRESS),
+  };
+  const requiredEnvAddresses = {
+    govCore: envAddresses.govCore,
+    govProposals: envAddresses.govProposals,
+    demoTarget: envAddresses.demoTarget,
   };
 
-  const providedEnvCount = Object.values(envAddresses).filter((value) => value !== undefined).length;
+  const providedEnvCount = Object.values(requiredEnvAddresses).filter((value) => value !== undefined).length;
 
   if (providedEnvCount === ENV_ADDRESS_NAMES.length) {
     return {
       govCore: envAddresses.govCore!,
       govProposals: envAddresses.govProposals!,
       demoTarget: envAddresses.demoTarget!,
+      ...(envAddresses.demoVotesToken === undefined ? {} : { demoVotesToken: envAddresses.demoVotesToken }),
       source: "env",
     };
   }
@@ -72,11 +82,17 @@ export function resolveSeedContractAddresses(options: ResolveSeedContractAddress
   const govCore = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.govCore]);
   const govProposals = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.govProposals]);
   const demoTarget = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoTarget]);
-  const missingKeys = [
-    govCore === undefined ? IGNITION_ADDRESS_KEYS.govCore : undefined,
-    govProposals === undefined ? IGNITION_ADDRESS_KEYS.govProposals : undefined,
-    demoTarget === undefined ? IGNITION_ADDRESS_KEYS.demoTarget : undefined,
-  ].filter((value): value is string => value !== undefined);
+  const demoVotesToken = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoVotesToken]);
+  const missingKeys: string[] = [];
+  if (govCore === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.govCore);
+  }
+  if (govProposals === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.govProposals);
+  }
+  if (demoTarget === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.demoTarget);
+  }
 
   if (missingKeys.length > 0) {
     throw new Error(
@@ -85,9 +101,10 @@ export function resolveSeedContractAddresses(options: ResolveSeedContractAddress
   }
 
   return {
-    govCore,
-    govProposals,
-    demoTarget,
+    govCore: govCore!,
+    govProposals: govProposals!,
+    demoTarget: demoTarget!,
+    ...(demoVotesToken === undefined ? {} : { demoVotesToken }),
     source: "ignition",
     ignitionDeploymentFile: deploymentFile,
   };

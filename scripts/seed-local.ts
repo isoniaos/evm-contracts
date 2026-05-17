@@ -32,7 +32,7 @@ function mask(proposalType: bigint): bigint {
 
 async function main(): Promise<void> {
   const [deployer, simpleAdmin, bicameralAdmin, proposer, approverA, approverB, vetoer, executor] = await ethers.getSigners();
-  const { govCore, govProposals, demoTarget } = await resolveProtocolContracts();
+  const { govCore, govProposals, demoTarget, demoVotesToken } = await resolveProtocolContracts();
 
   const simple = await createSimpleDaoPlus({
     govCore,
@@ -58,12 +58,20 @@ async function main(): Promise<void> {
     executor,
   });
 
+  const demoVotes = demoVotesToken === undefined
+    ? undefined
+    : await seedDemoVotesToken({
+      demoVotesToken,
+      holders: { proposer, approverA, approverB, executor },
+    });
+
   console.log(JSON.stringify({
     chainId: Number((await ethers.provider.getNetwork()).chainId),
     contracts: {
       govCore: await govCore.getAddress(),
       govProposals: await govProposals.getAddress(),
       demoTarget: await demoTarget.getAddress(),
+      ...(demoVotesToken === undefined ? {} : { demoVotesToken: await demoVotesToken.getAddress() }),
     },
     sampleAccounts: {
       deployer: deployer.address,
@@ -76,6 +84,7 @@ async function main(): Promise<void> {
       executor: executor.address,
     },
     organizations: { simple, bicameral },
+    ...(demoVotes === undefined ? {} : { demoVotes }),
   }, null, 2));
 }
 
@@ -101,8 +110,35 @@ async function createSimpleDaoPlus(context: any) {
 
   const standardProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, 101n);
   const treasuryProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.treasury, 202n);
+  const executedFeatureProposal = await createExecutedFeatureProposal({
+    govProposals,
+    demoTarget,
+    proposer,
+    approver: councilApprover,
+    executor,
+    orgId,
+    approvalBodyId: council,
+  });
+  const pendingObligationProposal = await createApprovedPendingObligationProposal({
+    govProposals,
+    demoTarget,
+    proposer,
+    approver: councilApprover,
+    orgId,
+    approvalBodyId: council,
+  });
 
-  return { orgId: orgId.toString(), bodies: { council: council.toString(), treasury: treasury.toString(), security: security.toString() }, proposals: { standardProposalId: standardProposalId.toString(), treasuryProposalId: treasuryProposalId.toString() } };
+  return {
+    orgId: orgId.toString(),
+    bodies: { council: council.toString(), treasury: treasury.toString(), security: security.toString() },
+    proposals: {
+      standardProposalId: standardProposalId.toString(),
+      treasuryProposalId: treasuryProposalId.toString(),
+      executedFeatureProposalId: executedFeatureProposal.proposalId.toString(),
+      pendingObligationProposalId: pendingObligationProposal.proposalId.toString(),
+    },
+    accountability: { executedFeatureProposal, pendingObligationProposal },
+  };
 }
 
 async function createBicameralPreview(context: any) {
@@ -150,10 +186,70 @@ async function grant(govCore: any, admin: any, orgId: bigint, bodyId: bigint, ro
 }
 
 async function createDemoProposal(govProposals: any, demoTarget: any, proposer: any, orgId: bigint, proposalType: bigint, number: bigint): Promise<bigint> {
-  const proposalId = await nextId(govProposals, "nextProposalId");
   const actionData = demoTarget.interface.encodeFunctionData("setNumber", [orgId, number]);
-  await (await govProposals.connect(proposer).createProposal(orgId, proposalType, await demoTarget.getAddress(), 0, ethers.keccak256(actionData), `ipfs://proposal-${proposalId}`)).wait();
+  return createTargetProposal(govProposals, demoTarget, proposer, orgId, proposalType, actionData);
+}
+
+async function createTargetProposal(govProposals: any, demoTarget: any, proposer: any, orgId: bigint, proposalType: bigint, actionData: string, value = 0n): Promise<bigint> {
+  const proposalId = await nextId(govProposals, "nextProposalId");
+  await (await govProposals.connect(proposer).createProposal(orgId, proposalType, await demoTarget.getAddress(), value, ethers.keccak256(actionData), `ipfs://proposal-${proposalId}`)).wait();
   return proposalId;
+}
+
+async function createExecutedFeatureProposal(context: any) {
+  const { govProposals, demoTarget, proposer, approver, executor, orgId, approvalBodyId } = context;
+  const feature = ethers.id("feature:v0.8:public-governance-archive");
+  const actionData = demoTarget.interface.encodeFunctionData("setFeatureEnabled", [orgId, feature, true]);
+  const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
+  await (await govProposals.connect(approver).approveProposal(orgId, proposalId, approvalBodyId)).wait();
+  await (await govProposals.connect(executor).executeProposal(orgId, proposalId, actionData)).wait();
+
+  return {
+    proposalId: proposalId.toString(),
+    action: "setFeatureEnabled",
+    feature,
+    enabled: true,
+    status: "executed",
+  };
+}
+
+async function createApprovedPendingObligationProposal(context: any) {
+  const { govProposals, demoTarget, proposer, approver, orgId, approvalBodyId } = context;
+  const obligationId = ethers.id("obligation:v0.8:pending-demo-follow-through");
+  const actionData = demoTarget.interface.encodeFunctionData("markObligationAccepted", [orgId, obligationId]);
+  const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
+  await (await govProposals.connect(approver).approveProposal(orgId, proposalId, approvalBodyId)).wait();
+
+  return {
+    proposalId: proposalId.toString(),
+    action: "markObligationAccepted",
+    obligationId,
+    status: "approved_not_executed",
+  };
+}
+
+async function seedDemoVotesToken(context: any) {
+  const { demoVotesToken, holders } = context;
+  const mintAmount = ethers.parseEther("1000");
+  const mintedTo = {
+    proposer: holders.proposer.address,
+    approverA: holders.approverA.address,
+    approverB: holders.approverB.address,
+    executor: holders.executor.address,
+  };
+
+  for (const holder of Object.values(holders) as any[]) {
+    await (await demoVotesToken.mint(holder.address, mintAmount)).wait();
+    await (await demoVotesToken.connect(holder).delegate(holder.address)).wait();
+  }
+
+  return {
+    token: await demoVotesToken.getAddress(),
+    symbol: await demoVotesToken.symbol(),
+    mintAmount: mintAmount.toString(),
+    delegated: true,
+    holders: mintedTo,
+  };
 }
 
 await main();
@@ -166,5 +262,6 @@ async function resolveProtocolContracts() {
     govCore: await ethers.getContractAt("GovCore", addresses.govCore),
     govProposals: await ethers.getContractAt("GovProposals", addresses.govProposals),
     demoTarget: await ethers.getContractAt("DemoTarget", addresses.demoTarget),
+    demoVotesToken: addresses.demoVotesToken === undefined ? undefined : await ethers.getContractAt("IsoDemoVotesToken", addresses.demoVotesToken),
   };
 }

@@ -1,6 +1,6 @@
 {
   "name": "@isonia/evm-contracts",
-  "version": "0.7.0-alpha.6",
+  "version": "0.8.0-alpha.1",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -8,6 +8,9 @@
     "test": "hardhat test",
     "deploy:local": "hardhat ignition deploy ignition/modules/IsoniaProtocolV01.ts --network localhost",
     "seed:local": "hardhat run scripts/seed-local.ts --network localhost"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.9",
