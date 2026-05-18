@@ -4,7 +4,7 @@ EVM smart contracts for the IsoniaOS governance architecture protocol.
 
 ## Status
 
-Active development target: v0.8 alpha accountability demo baseline on top of the v0.7 protocol hardening foundation.
+Active development target: v0.8 alpha accountability and integration-preview contract wave on top of the v0.7 protocol hardening foundation.
 
 ## Scope
 
@@ -15,13 +15,29 @@ Active development target: v0.8 alpha accountability demo baseline on top of the
 - mandates
 - policy rules
 - proposal lifecycle
+- organization-scoped execution target and selector registry
 - deterministic local proof-of-execution events for demo accountability flows
 
 ## Protocol Notes
 
-### v0.8 Accountability Demo Target
+### v0.8 Execution Target Registry
 
-`DemoTarget` remains the only target address allowed by `GovProposals` execution in this alpha. It is intentionally a local/demo target, not a production treasury or external integration authority.
+v0.8 adds an organization-scoped execution target/selector registry so proposal execution is no longer hardcoded to the local `DemoTarget`. Proposal execution authority is derived from IsoniaOS governance contracts and configured execution permissions.
+
+`GovProposals` requires:
+
+- the proposal target to be explicitly enabled for the organization;
+- the calldata selector to be explicitly enabled for that organization and target;
+- the proposal value and execution `msg.value` to stay within the target rule's `maxValue`;
+- normal function-call execution calldata to contain at least a 4-byte selector.
+
+Execution still enforces proposal status, approvals, vetoes, timelocks, executor role, exact `dataHash`, and exact `msg.value`. Registry updates emit `ExecutionTargetRuleUpdated` and `ExecutionSelectorRuleUpdated` so downstream indexers can observe governance execution permissions without decoding arbitrary target-contract events.
+
+Target contract behavior and events are execution evidence only. They are not universal governance authority and do not prove that external work, manual evidence, or offchain integrations are complete.
+
+### v0.8 Local/Lab Demo Target
+
+`DemoTarget` remains available as a local/lab target that must be explicitly enabled for demo organizations. It is not built-in governance authority, not a production treasury, and not an external integration authority.
 
 The v0.8 demo target preserves the existing `setNumber(uint64 orgId, uint256 newNumber)` path and adds governed actions for local accountability scenarios:
 
@@ -31,7 +47,7 @@ The v0.8 demo target preserves the existing `setNumber(uint64 orgId, uint256 new
 - `markObligationAccepted(uint64 orgId, bytes32 obligationId)`
 - `markObligationCancelled(uint64 orgId, bytes32 obligationId, string reason)`
 
-These methods emit deterministic events that downstream read models can later map into proposal history, execution state, obligation references, linked transaction hashes, and public proof-of-execution displays. They prove that the local governed target method executed onchain; they do not prove that external work, manual evidence, or offchain integrations are complete.
+These methods emit deterministic local/lab events that downstream read models can later map into proposal history, execution state, obligation references, linked transaction hashes, and public proof-of-execution displays. The local seed script explicitly enables the `DemoTarget` address and selectors for seeded demo organizations before creating executable demo proposals.
 
 ### Demo Votes Token
 
@@ -79,11 +95,15 @@ Hardhat request logs while debugging RPC or EVM failures. This setting changes
 only local node console logging; it does not change contract behavior or relax
 transaction/call failure semantics.
 
-Deploy protocol contracts with Ignition:
+Deploy local demo contracts with Ignition:
 
 ```txt
 corepack pnpm deploy:local
 ```
+
+The local demo module deploys `GovCore`, `GovProposals`, `DemoTarget`, and `IsoDemoVotesToken`. `DemoTarget` execution is not hardcoded in `GovProposals`; `seed:local` configures it as an explicit local/lab execution target for the seeded organizations.
+
+A protocol-only Ignition module is also available at `ignition/modules/IsoniaProtocol.ts` for future deployment paths that need only `GovCore` and `GovProposals`.
 
 Seed the Simple DAO+ and Bicameral preview topologies:
 
@@ -94,6 +114,8 @@ corepack pnpm seed:local
 `seed:local` reads the current chain's Ignition deployment file, such as `ignition/deployments/chain-31337/deployed_addresses.json`, and seeds those existing contracts. The `contracts` addresses printed by `seed:local` must match the Ignition deployed addresses.
 
 The local v0.8 seed also creates one approved-and-executed accountability demo action and one approved-but-not-executed obligation action. If the Ignition deployment includes `IsoDemoVotesToken`, `seed:local` mints demo votes to deterministic sample actors and self-delegates them for local simulation.
+
+Future Sepolia lab deployments should be represented by deployment manifests that record explicit chain IDs, protocol addresses, deployment capabilities, and configured execution target/selector permissions. Runtime behavior must not be inferred from package version strings.
 
 Optional explicit address mode is available when seeding a known contract set directly.
 

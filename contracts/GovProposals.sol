@@ -18,21 +18,29 @@ import {
     MissingRequiredApprovals,
     TimelockNotExpired,
     DataHashMismatch,
-    TargetNotAllowed,
+    OrganizationNotActive,
+    OrganizationAlreadyFinalized,
+    ExecutionTargetNotAllowed,
+    ExecutionSelectorNotAllowed,
+    InvalidExecutionCalldata,
+    ExecutionValueLimitExceeded,
     InvalidExecutionValue,
     ExecutionFailed
 } from "./GovErrors.sol";
 
 contract GovProposals {
     IGovCore public immutable govCore;
-    address public immutable demoTarget;
     uint64 public nextProposalId = 1;
 
+    mapping(uint64 => mapping(address => GovTypes.ExecutionTargetRule)) public executionTargetRules;
+    mapping(uint64 => mapping(address => mapping(bytes4 => bool))) public executionSelectorRules;
     mapping(uint64 => GovTypes.Proposal) public proposals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalApprovals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalVetoes;
     mapping(uint64 => mapping(uint64 => address)) public proposalDecisionActor;
 
+    event ExecutionTargetRuleUpdated(uint64 indexed orgId, address indexed target, bool enabled, uint256 maxValue, address indexed actor);
+    event ExecutionSelectorRuleUpdated(uint64 indexed orgId, address indexed target, bytes4 selector, bool enabled, address actor);
     event ProposalCreated(
         uint64 indexed orgId,
         uint64 indexed proposalId,
@@ -56,12 +64,47 @@ contract GovProposals {
         GovTypes.ProposalStatus newStatus
     );
 
-    constructor(address govCoreAddress, address demoTargetAddress) {
-        if (govCoreAddress == address(0) || demoTargetAddress == address(0)) {
+    constructor(address govCoreAddress) {
+        if (govCoreAddress == address(0)) {
             revert ZeroAddress();
         }
         govCore = IGovCore(govCoreAddress);
-        demoTarget = demoTargetAddress;
+    }
+
+    function setExecutionTargetRule(
+        uint64 orgId,
+        address target,
+        bool enabled,
+        uint256 maxValue
+    ) external {
+        _requireBootstrapOrgAdmin(orgId);
+        if (target == address(0)) {
+            revert ZeroAddress();
+        }
+        executionTargetRules[orgId][target] = GovTypes.ExecutionTargetRule({enabled: enabled, maxValue: maxValue});
+        emit ExecutionTargetRuleUpdated(orgId, target, enabled, maxValue, msg.sender);
+    }
+
+    function setExecutionSelectorRule(
+        uint64 orgId,
+        address target,
+        bytes4 selector,
+        bool enabled
+    ) external {
+        _requireBootstrapOrgAdmin(orgId);
+        if (target == address(0)) {
+            revert ZeroAddress();
+        }
+        executionSelectorRules[orgId][target][selector] = enabled;
+        emit ExecutionSelectorRuleUpdated(orgId, target, selector, enabled, msg.sender);
+    }
+
+    function isExecutionTargetAllowed(uint64 orgId, address target) external view returns (bool isAllowed) {
+        isAllowed = executionTargetRules[orgId][target].enabled;
+    }
+
+    function isExecutionSelectorAllowed(uint64 orgId, address target, bytes4 selector) external view returns (bool isAllowed) {
+        isAllowed = executionSelectorRules[orgId][target][selector];
     }
 
     function createProposal(
@@ -160,8 +203,12 @@ contract GovProposals {
         if (!govCore.canActOnProposalType(orgId, msg.sender, rule.executorBody, GovTypes.RoleType.Executor, proposal.proposalType)) {
             revert Unauthorized(msg.sender);
         }
-        if (proposal.target != demoTarget) {
-            revert TargetNotAllowed(proposal.target);
+        GovTypes.ExecutionTargetRule memory executionRule = _requireExecutionPermission(proposal.orgId, proposal.target, actionData);
+        if (proposal.value > executionRule.maxValue) {
+            revert ExecutionValueLimitExceeded(proposal.orgId, proposal.target, executionRule.maxValue, proposal.value);
+        }
+        if (msg.value > executionRule.maxValue) {
+            revert ExecutionValueLimitExceeded(proposal.orgId, proposal.target, executionRule.maxValue, msg.value);
         }
         if (keccak256(actionData) != proposal.dataHash) {
             revert DataHashMismatch(proposal.dataHash, keccak256(actionData));
@@ -194,6 +241,45 @@ contract GovProposals {
         }
         _setProposalStatus(proposal, GovTypes.ProposalStatus.Cancelled);
         emit ProposalCancelled(orgId, proposalId, msg.sender);
+    }
+
+    function _requireBootstrapOrgAdmin(uint64 orgId) internal view {
+        if (!govCore.isOrganizationActive(orgId)) {
+            revert OrganizationNotActive(orgId);
+        }
+        if (!govCore.isOrganizationAdmin(orgId, msg.sender)) {
+            revert Unauthorized(msg.sender);
+        }
+        if (govCore.isOrganizationFinalized(orgId)) {
+            revert OrganizationAlreadyFinalized(orgId);
+        }
+    }
+
+    function _requireExecutionPermission(
+        uint64 orgId,
+        address target,
+        bytes calldata actionData
+    ) internal view returns (GovTypes.ExecutionTargetRule memory rule) {
+        if (target == address(0)) {
+            revert ZeroAddress();
+        }
+        bytes4 selector = _executionSelector(actionData);
+        rule = executionTargetRules[orgId][target];
+        if (!rule.enabled) {
+            revert ExecutionTargetNotAllowed(orgId, target);
+        }
+        if (!executionSelectorRules[orgId][target][selector]) {
+            revert ExecutionSelectorNotAllowed(orgId, target, selector);
+        }
+    }
+
+    function _executionSelector(bytes calldata actionData) internal pure returns (bytes4 selector) {
+        if (actionData.length < 4) {
+            revert InvalidExecutionCalldata();
+        }
+        assembly {
+            selector := calldataload(actionData.offset)
+        }
     }
 
     function _requireEnabledPolicy(uint64 orgId, GovTypes.ProposalType proposalType) internal view returns (GovTypes.PolicyRule memory rule) {

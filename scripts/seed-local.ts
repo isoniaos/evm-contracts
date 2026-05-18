@@ -26,6 +26,16 @@ const PROPOSAL_TYPE = {
   emergency: 4n,
 } as const;
 
+const DEMO_TARGET_MAX_VALUE = ethers.parseEther("1");
+const DEMO_TARGET_FUNCTIONS = [
+  "setNumber(uint64,uint256)",
+  "setFeatureEnabled(uint64,bytes32,bool)",
+  "setUintParam(uint64,bytes32,uint256)",
+  "releaseNativePayment(uint64,bytes32,address)",
+  "markObligationAccepted(uint64,bytes32)",
+  "markObligationCancelled(uint64,bytes32,string)",
+] as const;
+
 function mask(proposalType: bigint): bigint {
   return 1n << proposalType;
 }
@@ -107,6 +117,7 @@ async function createSimpleDaoPlus(context: any) {
 
   await (await govCore.connect(admin).setPolicyRule(orgId, PROPOSAL_TYPE.standard, [council], [], council, 0, true)).wait();
   await (await govCore.connect(admin).setPolicyRule(orgId, PROPOSAL_TYPE.treasury, [council, treasury], [security], council, 3600, true)).wait();
+  const demoExecutionTarget = await configureDemoTargetExecutionRules(govProposals, demoTarget, admin, orgId);
 
   const standardProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, 101n);
   const treasuryProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.treasury, 202n);
@@ -138,6 +149,7 @@ async function createSimpleDaoPlus(context: any) {
       pendingObligationProposalId: pendingObligationProposal.proposalId.toString(),
     },
     accountability: { executedFeatureProposal, pendingObligationProposal },
+    executionTargets: { demoTarget: demoExecutionTarget },
   };
 }
 
@@ -162,11 +174,17 @@ async function createBicameralPreview(context: any) {
   await (await govCore.connect(admin).setPolicyRule(orgId, PROPOSAL_TYPE.treasury, [capital], [], capital, 0, true)).wait();
   await (await govCore.connect(admin).setPolicyRule(orgId, PROPOSAL_TYPE.upgrade, [merit], [emergency], merit, 7200, true)).wait();
   await (await govCore.connect(admin).setPolicyRule(orgId, PROPOSAL_TYPE.emergency, [emergency], [], emergency, 0, true)).wait();
+  const demoExecutionTarget = await configureDemoTargetExecutionRules(govProposals, demoTarget, admin, orgId);
 
   const treasuryProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.treasury, 303n);
   const upgradeProposalId = await createDemoProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.upgrade, 404n);
 
-  return { orgId: orgId.toString(), bodies: { capital: capital.toString(), merit: merit.toString(), emergency: emergency.toString() }, proposals: { treasuryProposalId: treasuryProposalId.toString(), upgradeProposalId: upgradeProposalId.toString() } };
+  return {
+    orgId: orgId.toString(),
+    bodies: { capital: capital.toString(), merit: merit.toString(), emergency: emergency.toString() },
+    proposals: { treasuryProposalId: treasuryProposalId.toString(), upgradeProposalId: upgradeProposalId.toString() },
+    executionTargets: { demoTarget: demoExecutionTarget },
+  };
 }
 
 async function nextId(contract: any, methodName: string): Promise<bigint> {
@@ -183,6 +201,24 @@ async function grant(govCore: any, admin: any, orgId: bigint, bodyId: bigint, ro
   const roleId = await nextId(govCore, "nextRoleId");
   await (await govCore.connect(admin).createRole(orgId, bodyId, roleType, `ipfs://role-${roleId}`)).wait();
   await (await govCore.connect(admin).assignMandate(orgId, roleId, holder, 0, 0, mask(proposalType), 0)).wait();
+}
+
+async function configureDemoTargetExecutionRules(govProposals: any, demoTarget: any, admin: any, orgId: bigint) {
+  const target = await demoTarget.getAddress();
+  await (await govProposals.connect(admin).setExecutionTargetRule(orgId, target, true, DEMO_TARGET_MAX_VALUE)).wait();
+  const selectors: Array<{ signature: string; selector: string }> = [];
+
+  for (const signature of DEMO_TARGET_FUNCTIONS) {
+    const selector = demoTarget.interface.getFunction(signature).selector;
+    await (await govProposals.connect(admin).setExecutionSelectorRule(orgId, target, selector, true)).wait();
+    selectors.push({ signature, selector });
+  }
+
+  return {
+    address: target,
+    maxValue: DEMO_TARGET_MAX_VALUE.toString(),
+    selectors,
+  };
 }
 
 async function createDemoProposal(govProposals: any, demoTarget: any, proposer: any, orgId: bigint, proposalType: bigint, number: bigint): Promise<bigint> {

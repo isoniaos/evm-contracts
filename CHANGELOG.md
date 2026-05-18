@@ -6,6 +6,20 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.8.0-alpha.2]
+
+### Added
+
+- Added organization-scoped execution target and selector registry rules to `GovProposals`, including deterministic registry update events for indexing.
+- Added a protocol-only Ignition module that deploys `GovCore` and `GovProposals` without local demo contracts.
+- Added tests for explicit execution target/selector configuration, unconfigured target rejection, unconfigured selector rejection, short calldata rejection, value limits, data hash enforcement, executor/timelock behavior, and post-finalization registry immutability.
+
+### Changed
+
+- Removed the constructor-level `demoTarget` execution authority from `GovProposals`; local demo execution now requires explicit seeded target and selector rules.
+- Updated local seeding to configure `DemoTarget` as a local/lab execution target for seeded demo organizations before creating executable demo proposals.
+- Bumped package version to `0.8.0-alpha.2`.
+
 ## [0.8.0-alpha.1]
 
 ### Added
@@ -113,7 +127,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.1...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.2...HEAD
+[0.8.0-alpha.2]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.1...v0.8.0-alpha.2
 [0.8.0-alpha.1]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.6...v0.8.0-alpha.1
 [0.7.0-alpha.6]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.5...v0.7.0-alpha.6
 [0.7.0-alpha.5]: https://github.com/isoniaos/evm-contracts/compare/v0.7.0-alpha.4...v0.7.0-alpha.5

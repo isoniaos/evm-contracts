@@ -7,6 +7,7 @@ const { ethers } = hardhatRuntime;
 type EthersHelpers = typeof ethers;
 type DeployedContract = BaseContract;
 type SignerWithAddress = Awaited<ReturnType<EthersHelpers["getSigners"]>>[number];
+const EXECUTION_TARGET_MAX_VALUE = ethers.parseEther("1");
 
 const BODY_KIND = {
   unknown: 0n,
@@ -37,6 +38,15 @@ const PROPOSAL_STATUS = {
   vetoed: 5n,
   executed: 6n,
 } as const;
+
+const DEMO_TARGET_FUNCTIONS = [
+  "setNumber(uint64,uint256)",
+  "setFeatureEnabled(uint64,bytes32,bool)",
+  "setUintParam(uint64,bytes32,uint256)",
+  "releaseNativePayment(uint64,bytes32,address)",
+  "markObligationAccepted(uint64,bytes32)",
+  "markObligationCancelled(uint64,bytes32,string)",
+] as const;
 
 const ONE_HOUR = 3600n;
 
@@ -100,6 +110,10 @@ interface ProtocolContext {
   readonly orgB: OrgContext;
 }
 
+interface DeployProtocolOptions {
+  readonly configureDemoTarget?: boolean;
+}
+
 interface ProposalView {
   readonly status: bigint;
   readonly executableAt: bigint;
@@ -122,6 +136,14 @@ function createAction(demoTarget: DeployedContract, orgId: bigint, number: bigin
 function createTargetAction(demoTarget: DeployedContract, methodName: string, args: readonly unknown[]): { actionData: string; dataHash: string } {
   const actionData: string = demoTarget.interface.encodeFunctionData(methodName, args);
   return { actionData, dataHash: ethers.keccak256(actionData) };
+}
+
+function selectorFor(contract: DeployedContract, signature: string): string {
+  const fragment = contract.interface.getFunction(signature);
+  if (fragment === null) {
+    throw new Error(`Unknown function signature: ${signature}`);
+  }
+  return fragment.selector;
 }
 
 async function nextOrgId(govCore: DeployedContract): Promise<bigint> {
@@ -238,6 +260,35 @@ async function configurePolicies(govCore: DeployedContract, orgAdmin: SignerWith
   await invoke(govCore.connect(orgAdmin), "setPolicyRule", [org.orgId, PROPOSAL_TYPE.treasury, [org.bodies.councilBodyId, org.bodies.treasuryBodyId], singleBody(org.bodies.securityBodyId), org.bodies.councilBodyId, ONE_HOUR, true]);
 }
 
+async function configureExecutionTarget(
+  govProposals: DeployedContract,
+  orgAdmin: SignerWithAddress,
+  orgId: bigint,
+  target: string,
+  maxValue: bigint = EXECUTION_TARGET_MAX_VALUE,
+): Promise<void> {
+  await invoke(govProposals.connect(orgAdmin), "setExecutionTargetRule", [orgId, target, true, maxValue]);
+}
+
+async function configureExecutionSelector(
+  govProposals: DeployedContract,
+  orgAdmin: SignerWithAddress,
+  orgId: bigint,
+  target: string,
+  selector: string,
+): Promise<void> {
+  await invoke(govProposals.connect(orgAdmin), "setExecutionSelectorRule", [orgId, target, selector, true]);
+}
+
+async function configureDemoTargetExecutionRules(context: ProtocolContext): Promise<void> {
+  const target = await context.demoTarget.getAddress();
+  await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+
+  for (const signature of DEMO_TARGET_FUNCTIONS) {
+    await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selectorFor(context.demoTarget, signature));
+  }
+}
+
 async function configureMandates(context: ProtocolContext): Promise<void> {
   await grantRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.proposer, context.proposer, PROPOSAL_TYPE.standard, "ipfs://standard-proposer");
   await grantRole(context.govCore, context.orgAdminA, context.orgA.orgId, context.orgA.bodies.councilBodyId, ROLE_TYPE.proposer, context.proposer, PROPOSAL_TYPE.treasury, "ipfs://treasury-proposer");
@@ -271,17 +322,20 @@ async function approveTreasury(context: ProtocolContext, proposalId: bigint): Pr
   await invoke(context.govProposals.connect(context.treasuryApprover), "approveProposal", [context.orgA.orgId, proposalId, context.orgA.bodies.treasuryBodyId]);
 }
 
-async function deployProtocol(): Promise<ProtocolContext> {
+async function deployProtocol(options: DeployProtocolOptions = {}): Promise<ProtocolContext> {
   const [deployer, orgAdminA, orgAdminB, proposer, councilApprover, treasuryApprover, vetoer, executor, outsider]: SignerWithAddress[] = await ethers.getSigners();
   const govCore: DeployedContract = await ethers.deployContract("GovCore") as unknown as DeployedContract;
   const demoTarget: DeployedContract = await ethers.deployContract("DemoTarget", [deployer.address]) as unknown as DeployedContract;
-  const govProposals: DeployedContract = await ethers.deployContract("GovProposals", [await govCore.getAddress(), await demoTarget.getAddress()]) as unknown as DeployedContract;
+  const govProposals: DeployedContract = await ethers.deployContract("GovProposals", [await govCore.getAddress()]) as unknown as DeployedContract;
   await invoke(demoTarget, "setGovProposals", [await govProposals.getAddress()]);
   const orgA: OrgContext = await createOrgContext(govCore, orgAdminA, "alpha");
   const orgB: OrgContext = await createOrgContext(govCore, orgAdminB, "beta");
   const context: ProtocolContext = { govCore, govProposals, demoTarget, orgAdminA, orgAdminB, proposer, councilApprover, treasuryApprover, vetoer, executor, outsider, orgA, orgB };
   await configureMandates(context);
   await configurePolicies(govCore, orgAdminA, orgA);
+  if (options.configureDemoTarget ?? true) {
+    await configureDemoTargetExecutionRules(context);
+  }
   return context;
 }
 
@@ -603,6 +657,20 @@ describe("Protocol v0.1", function () {
         .withArgs(context.orgA.orgId);
     });
 
+    it("blocks execution registry bootstrap configuration after finalization", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const target = await context.demoTarget.getAddress();
+      const selector = selectorFor(context.demoTarget, "setNumber(uint64,uint256)");
+      await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
+
+      await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionTargetRule", [context.orgA.orgId, target, false, 0n]))
+        .to.be.revertedWithCustomError(context.govProposals, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionSelectorRule", [context.orgA.orgId, target, selector, false]))
+        .to.be.revertedWithCustomError(context.govProposals, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+    });
+
     it("does not leave proposal cancellation as a post-finalization admin override", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
       await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
@@ -623,9 +691,13 @@ describe("Protocol v0.1", function () {
       .withArgs(context.orgA.orgId, context.orgB.bodies.councilBodyId);
   });
 
-  it("executes a standard proposal end-to-end against DemoTarget", async function (): Promise<void> {
+  it("executes a standard proposal end-to-end against an explicitly configured DemoTarget selector", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
+    const target = await context.demoTarget.getAddress();
+    const selector = selectorFor(context.demoTarget, "setNumber(uint64,uint256)");
     const proposal = await createProposal(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), 77n);
+    expect(await readBoolean(context.govProposals, "isExecutionTargetAllowed", [context.orgA.orgId, target])).to.equal(true);
+    expect(await readBoolean(context.govProposals, "isExecutionSelectorAllowed", [context.orgA.orgId, target, selector])).to.equal(true);
     await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
     await invoke(context.govProposals.connect(context.outsider), "queueProposal", [context.orgA.orgId, proposal.proposalId]);
     await invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]);
@@ -633,6 +705,72 @@ describe("Protocol v0.1", function () {
     expect(proposalState.status).to.equal(PROPOSAL_STATUS.executed);
     expect(await readBigInt(context.demoTarget, "number")).to.equal(77n);
     expect(await readBigInt(context.demoTarget, "lastOrgId")).to.equal(context.orgA.orgId);
+  });
+
+  it("keeps local DemoTarget execution blocked until explicit registry configuration is set", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol({ configureDemoTarget: false });
+    const target = await context.demoTarget.getAddress();
+    const selector = selectorFor(context.demoTarget, "setNumber(uint64,uint256)");
+    const proposal = await createProposal(context, PROPOSAL_TYPE.standard, target, 78n);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]))
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionTargetNotAllowed")
+      .withArgs(context.orgA.orgId, target);
+
+    await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+    await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selector);
+    await invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]);
+
+    expect(await readBigInt(context.demoTarget, "number")).to.equal(78n);
+  });
+
+  it("blocks execution when the target is configured but the selector is not", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const standaloneTarget = await ethers.deployContract("DemoTarget", [context.orgAdminA.address]) as unknown as DeployedContract;
+    const target = await standaloneTarget.getAddress();
+    await invoke(standaloneTarget.connect(context.orgAdminA), "setGovProposals", [await context.govProposals.getAddress()]);
+    await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+    const action = createTargetAction(standaloneTarget, "setNumber", [context.orgA.orgId, 79n]);
+    const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]))
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionSelectorNotAllowed")
+      .withArgs(context.orgA.orgId, target, selectorFor(standaloneTarget, "setNumber(uint64,uint256)"));
+  });
+
+  it("rejects execution calldata shorter than a function selector", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const target = await context.demoTarget.getAddress();
+    const action = { actionData: "0x123456", dataHash: ethers.keccak256("0x123456") };
+    const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]))
+      .to.be.revertedWithCustomError(context.govProposals, "InvalidExecutionCalldata");
+  });
+
+  it("rejects execution when proposal or msg.value exceeds the target limit", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const target = await context.demoTarget.getAddress();
+    const action = createAction(context.demoTarget, context.orgA.orgId, 80n);
+    const value = EXECUTION_TARGET_MAX_VALUE + 1n;
+    const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action, value);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+    const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+    await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData, { value }))
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionValueLimitExceeded")
+      .withArgs(context.orgA.orgId, target, EXECUTION_TARGET_MAX_VALUE, value);
+
+    const msgValueAction = createAction(context.demoTarget, context.orgA.orgId, 81n);
+    const msgValueProposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, msgValueAction);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, msgValueProposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(executeProposal(context.orgA.orgId, msgValueProposal.proposalId, msgValueProposal.actionData, { value }))
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionValueLimitExceeded")
+      .withArgs(context.orgA.orgId, target, EXECUTION_TARGET_MAX_VALUE, value);
   });
 
   describe("v0.8 accountability demo target", function () {
@@ -787,15 +925,31 @@ describe("Protocol v0.1", function () {
       .withArgs(proposal.dataHash, wrongAction.dataHash);
   });
 
-  it("blocks execution to a non-whitelisted target", async function (): Promise<void> {
+  it("blocks execution to an unconfigured target", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
     const proposal = await createProposal(context, PROPOSAL_TYPE.standard, context.outsider.address, 555n);
     await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
     await expect(
       invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]),
     )
-      .to.be.revertedWithCustomError(context.govProposals, "TargetNotAllowed")
-      .withArgs(context.outsider.address);
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionTargetNotAllowed")
+      .withArgs(context.orgA.orgId, context.outsider.address);
+  });
+
+  it("rejects zero execution target addresses", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const selector = selectorFor(context.demoTarget, "setNumber(uint64,uint256)");
+
+    await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionTargetRule", [context.orgA.orgId, ethers.ZeroAddress, true, 0n]))
+      .to.be.revertedWithCustomError(context.govProposals, "ZeroAddress");
+    await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionSelectorRule", [context.orgA.orgId, ethers.ZeroAddress, selector, true]))
+      .to.be.revertedWithCustomError(context.govProposals, "ZeroAddress");
+
+    const proposal = await createProposal(context, PROPOSAL_TYPE.standard, ethers.ZeroAddress, 556n);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]))
+      .to.be.revertedWithCustomError(context.govProposals, "ZeroAddress");
   });
 
   it("rejects approval from an unauthorized actor", async function (): Promise<void> {

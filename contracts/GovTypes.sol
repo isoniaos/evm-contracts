@@ -109,6 +109,11 @@ library GovTypes {
         bool enabled;
     }
 
+    struct ExecutionTargetRule {
+        bool enabled;
+        uint256 maxValue;
+    }
+
     struct BodyCreateInput {
         BodyKind kind;
         string metadataURI;

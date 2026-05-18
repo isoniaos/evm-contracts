@@ -27,7 +27,7 @@ contract GovProtocolTest is Test {
     function setUp() public {
         govCore = new GovCore();
         demoTarget = new DemoTarget(address(this));
-        govProposals = new GovProposals(address(govCore), address(demoTarget));
+        govProposals = new GovProposals(address(govCore));
         demoTarget.setGovProposals(address(govProposals));
         orgId = govCore.createOrganization("alpha", "ipfs://alpha", orgAdmin);
         foreignOrgId = govCore.createOrganization("beta", "ipfs://beta", foreignAdmin);
@@ -40,6 +40,10 @@ contract GovProtocolTest is Test {
         _configureRole(orgId, bodyId, GovTypes.RoleType.Executor, executor);
         vm.prank(orgAdmin);
         govCore.setPolicyRule(orgId, GovTypes.ProposalType.Standard, _singleBodyArray(bodyId), _emptyBodyArray(), bodyId, 0, true);
+        vm.prank(orgAdmin);
+        govProposals.setExecutionTargetRule(orgId, address(demoTarget), true, 0);
+        vm.prank(orgAdmin);
+        govProposals.setExecutionSelectorRule(orgId, address(demoTarget), DemoTarget.setNumber.selector, true);
     }
 
     function testFuzz_ProposalExecutionPersistsDemoState(uint256 newNumber) public {
