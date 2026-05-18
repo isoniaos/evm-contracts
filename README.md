@@ -24,14 +24,17 @@ Active development target: v0.8 alpha accountability and integration-preview con
 
 v0.8 adds an organization-scoped execution target/selector registry so proposal execution is no longer hardcoded to the local `DemoTarget`. Proposal execution authority is derived from IsoniaOS governance contracts and configured execution permissions.
 
+Proposals now carry a compact protocol-level action identity: `target`, `value`, `actionSelector`, and `dataHash`. The selector is not ABI decoding and does not make arbitrary target-contract events governance authority. It lets IsoniaOS explain which registered selector a proposal intends to execute before full calldata is supplied.
+
 `GovProposals` requires:
 
 - the proposal target to be explicitly enabled for the organization;
-- the calldata selector to be explicitly enabled for that organization and target;
+- the proposal action selector to be explicitly enabled for that organization and target;
+- execution calldata to have the same selector declared by the proposal;
 - the proposal value and execution `msg.value` to stay within the target rule's `maxValue`;
 - normal function-call execution calldata to contain at least a 4-byte selector.
 
-Execution still enforces proposal status, approvals, vetoes, timelocks, executor role, exact `dataHash`, and exact `msg.value`. Registry updates emit `ExecutionTargetRuleUpdated` and `ExecutionSelectorRuleUpdated` so downstream indexers can observe governance execution permissions without decoding arbitrary target-contract events.
+Execution still enforces proposal status, approvals, vetoes, timelocks, executor role, exact full-calldata `dataHash`, and exact `msg.value`. Full calldata remains supplied at execution time and must hash to the proposal's stored `dataHash`. Registry updates emit `ExecutionTargetRuleUpdated` and `ExecutionSelectorRuleUpdated`, while `ProposalCreated` includes `actionSelector`, so downstream indexers can observe proposal intent and governance execution permissions without decoding arbitrary target-contract events.
 
 Target contract behavior and events are execution evidence only. They are not universal governance authority and do not prove that external work, manual evidence, or offchain integrations are complete.
 

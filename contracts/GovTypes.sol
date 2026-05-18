@@ -152,6 +152,7 @@ library GovTypes {
         address creator;
         address target;
         uint256 value;
+        bytes4 actionSelector;
         bytes32 dataHash;
         uint64 createdAt;
         uint64 queuedAt;

@@ -22,6 +22,7 @@ import {
     OrganizationAlreadyFinalized,
     ExecutionTargetNotAllowed,
     ExecutionSelectorNotAllowed,
+    ActionSelectorMismatch,
     InvalidExecutionCalldata,
     ExecutionValueLimitExceeded,
     InvalidExecutionValue,
@@ -49,6 +50,7 @@ contract GovProposals {
         address creator,
         address target,
         uint256 value,
+        bytes4 actionSelector,
         bytes32 dataHash,
         string metadataURI
     );
@@ -112,6 +114,7 @@ contract GovProposals {
         GovTypes.ProposalType proposalType,
         address target,
         uint256 value,
+        bytes4 actionSelector,
         bytes32 dataHash,
         string calldata metadataURI
     ) external returns (uint64 proposalId) {
@@ -133,6 +136,7 @@ contract GovProposals {
             creator: msg.sender,
             target: target,
             value: value,
+            actionSelector: actionSelector,
             dataHash: dataHash,
             createdAt: _currentTimestamp(),
             queuedAt: 0,
@@ -140,7 +144,7 @@ contract GovProposals {
             executedAt: 0,
             metadataURI: metadataURI
         });
-        emit ProposalCreated(orgId, proposalId, proposalType, rule.version, msg.sender, target, value, dataHash, metadataURI);
+        emit ProposalCreated(orgId, proposalId, proposalType, rule.version, msg.sender, target, value, actionSelector, dataHash, metadataURI);
     }
 
     function approveProposal(uint64 orgId, uint64 proposalId, uint64 bodyId) external {
@@ -203,15 +207,23 @@ contract GovProposals {
         if (!govCore.canActOnProposalType(orgId, msg.sender, rule.executorBody, GovTypes.RoleType.Executor, proposal.proposalType)) {
             revert Unauthorized(msg.sender);
         }
-        GovTypes.ExecutionTargetRule memory executionRule = _requireExecutionPermission(proposal.orgId, proposal.target, actionData);
+        if (proposal.target == address(0)) {
+            revert ZeroAddress();
+        }
+        bytes4 actualSelector = _executionSelector(actionData);
+        if (actualSelector != proposal.actionSelector) {
+            revert ActionSelectorMismatch(proposal.actionSelector, actualSelector);
+        }
+        GovTypes.ExecutionTargetRule memory executionRule = _requireExecutionPermission(proposal.orgId, proposal.target, proposal.actionSelector);
         if (proposal.value > executionRule.maxValue) {
             revert ExecutionValueLimitExceeded(proposal.orgId, proposal.target, executionRule.maxValue, proposal.value);
         }
         if (msg.value > executionRule.maxValue) {
             revert ExecutionValueLimitExceeded(proposal.orgId, proposal.target, executionRule.maxValue, msg.value);
         }
-        if (keccak256(actionData) != proposal.dataHash) {
-            revert DataHashMismatch(proposal.dataHash, keccak256(actionData));
+        bytes32 actualDataHash = keccak256(actionData);
+        if (actualDataHash != proposal.dataHash) {
+            revert DataHashMismatch(proposal.dataHash, actualDataHash);
         }
         if (msg.value != proposal.value) {
             revert InvalidExecutionValue(proposal.value, msg.value);
@@ -258,12 +270,11 @@ contract GovProposals {
     function _requireExecutionPermission(
         uint64 orgId,
         address target,
-        bytes calldata actionData
+        bytes4 selector
     ) internal view returns (GovTypes.ExecutionTargetRule memory rule) {
         if (target == address(0)) {
             revert ZeroAddress();
         }
-        bytes4 selector = _executionSelector(actionData);
         rule = executionTargetRules[orgId][target];
         if (!rule.enabled) {
             revert ExecutionTargetNotAllowed(orgId, target);

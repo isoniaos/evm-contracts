@@ -40,6 +40,13 @@ function mask(proposalType: bigint): bigint {
   return 1n << proposalType;
 }
 
+function selectorFromActionData(actionData: string): string {
+  if (actionData.length < 10) {
+    throw new Error("Action data is shorter than a function selector");
+  }
+  return `0x${actionData.slice(2, 10)}`;
+}
+
 async function main(): Promise<void> {
   const [deployer, simpleAdmin, bicameralAdmin, proposer, approverA, approverB, vetoer, executor] = await ethers.getSigners();
   const { govCore, govProposals, demoTarget, demoVotesToken } = await resolveProtocolContracts();
@@ -228,7 +235,8 @@ async function createDemoProposal(govProposals: any, demoTarget: any, proposer: 
 
 async function createTargetProposal(govProposals: any, demoTarget: any, proposer: any, orgId: bigint, proposalType: bigint, actionData: string, value = 0n): Promise<bigint> {
   const proposalId = await nextId(govProposals, "nextProposalId");
-  await (await govProposals.connect(proposer).createProposal(orgId, proposalType, await demoTarget.getAddress(), value, ethers.keccak256(actionData), `ipfs://proposal-${proposalId}`)).wait();
+  const actionSelector = selectorFromActionData(actionData);
+  await (await govProposals.connect(proposer).createProposal(orgId, proposalType, await demoTarget.getAddress(), value, actionSelector, ethers.keccak256(actionData), `ipfs://proposal-${proposalId}`)).wait();
   return proposalId;
 }
 
@@ -236,6 +244,7 @@ async function createExecutedFeatureProposal(context: any) {
   const { govProposals, demoTarget, proposer, approver, executor, orgId, approvalBodyId } = context;
   const feature = ethers.id("feature:v0.8:public-governance-archive");
   const actionData = demoTarget.interface.encodeFunctionData("setFeatureEnabled", [orgId, feature, true]);
+  const actionSelector = selectorFromActionData(actionData);
   const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
   await (await govProposals.connect(approver).approveProposal(orgId, proposalId, approvalBodyId)).wait();
   await (await govProposals.connect(executor).executeProposal(orgId, proposalId, actionData)).wait();
@@ -243,6 +252,7 @@ async function createExecutedFeatureProposal(context: any) {
   return {
     proposalId: proposalId.toString(),
     action: "setFeatureEnabled",
+    actionSelector,
     feature,
     enabled: true,
     status: "executed",
@@ -253,12 +263,14 @@ async function createApprovedPendingObligationProposal(context: any) {
   const { govProposals, demoTarget, proposer, approver, orgId, approvalBodyId } = context;
   const obligationId = ethers.id("obligation:v0.8:pending-demo-follow-through");
   const actionData = demoTarget.interface.encodeFunctionData("markObligationAccepted", [orgId, obligationId]);
+  const actionSelector = selectorFromActionData(actionData);
   const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
   await (await govProposals.connect(approver).approveProposal(orgId, proposalId, approvalBodyId)).wait();
 
   return {
     proposalId: proposalId.toString(),
     action: "markObligationAccepted",
+    actionSelector,
     obligationId,
     status: "approved_not_executed",
   };

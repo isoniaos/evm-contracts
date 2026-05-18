@@ -6,6 +6,17 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added selector-aware proposal action identity: proposals now store and emit `actionSelector` alongside `target`, `value`, and `dataHash`.
+- Added `ActionSelectorMismatch(bytes4 expectedSelector, bytes4 actualSelector)` for execution calldata whose selector differs from the proposal-declared selector.
+
+### Changed
+
+- Updated `createProposal` and `ProposalCreated` to carry `actionSelector`; execution still verifies full calldata against `dataHash` and registry selector rules.
+- Updated local seed paths to pass explicit `DemoTarget` selectors for demo/lab proposal actions.
+- Bumped package version to `0.8.0-alpha.3`.
+
 ## [0.8.0-alpha.2]
 
 ### Added

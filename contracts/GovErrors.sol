@@ -30,6 +30,7 @@ error TimelockNotExpired(uint64 proposalId, uint64 executableAt);
 error DataHashMismatch(bytes32 expected, bytes32 actual);
 error ExecutionTargetNotAllowed(uint64 orgId, address target);
 error ExecutionSelectorNotAllowed(uint64 orgId, address target, bytes4 selector);
+error ActionSelectorMismatch(bytes4 expectedSelector, bytes4 actualSelector);
 error InvalidExecutionCalldata();
 error ExecutionValueLimitExceeded(uint64 orgId, address target, uint256 limit, uint256 value);
 error InvalidOrganizationStatus(GovTypes.OrganizationStatus status);

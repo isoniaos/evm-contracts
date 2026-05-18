@@ -112,7 +112,15 @@ contract GovProtocolTest is Test {
     function _createStandardProposal(uint256 newNumber) internal returns (uint64 proposalId) {
         bytes memory actionData = _numberAction(newNumber);
         vm.prank(proposer);
-        proposalId = govProposals.createProposal(orgId, GovTypes.ProposalType.Standard, address(demoTarget), 0, keccak256(actionData), "ipfs://proposal");
+        proposalId = govProposals.createProposal(
+            orgId,
+            GovTypes.ProposalType.Standard,
+            address(demoTarget),
+            0,
+            DemoTarget.setNumber.selector,
+            keccak256(actionData),
+            "ipfs://proposal"
+        );
     }
 
     function _configureRole(uint64 targetOrgId, uint64 targetBodyId, GovTypes.RoleType roleType, address holder) internal {

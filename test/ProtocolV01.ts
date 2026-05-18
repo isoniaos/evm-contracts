@@ -116,7 +116,15 @@ interface DeployProtocolOptions {
 
 interface ProposalView {
   readonly status: bigint;
+  readonly actionSelector: string;
+  readonly dataHash: string;
   readonly executableAt: bigint;
+}
+
+interface ProposalAction {
+  readonly actionData: string;
+  readonly actionSelector: string;
+  readonly dataHash: string;
 }
 
 type BodyCreateInput = [bigint, string];
@@ -128,14 +136,21 @@ function singleBody(bodyId: bigint): bigint[] {
   return [bodyId];
 }
 
-function createAction(demoTarget: DeployedContract, orgId: bigint, number: bigint): { actionData: string; dataHash: string } {
-  const actionData: string = demoTarget.interface.encodeFunctionData("setNumber", [orgId, number]);
-  return { actionData, dataHash: ethers.keccak256(actionData) };
+function selectorFromActionData(actionData: string): string {
+  if (actionData.length < 10) {
+    throw new Error("Action data is shorter than a function selector");
+  }
+  return `0x${actionData.slice(2, 10)}`;
 }
 
-function createTargetAction(demoTarget: DeployedContract, methodName: string, args: readonly unknown[]): { actionData: string; dataHash: string } {
+function createAction(demoTarget: DeployedContract, orgId: bigint, number: bigint): ProposalAction {
+  const actionData: string = demoTarget.interface.encodeFunctionData("setNumber", [orgId, number]);
+  return { actionData, actionSelector: selectorFromActionData(actionData), dataHash: ethers.keccak256(actionData) };
+}
+
+function createTargetAction(demoTarget: DeployedContract, methodName: string, args: readonly unknown[]): ProposalAction {
   const actionData: string = demoTarget.interface.encodeFunctionData(methodName, args);
-  return { actionData, dataHash: ethers.keccak256(actionData) };
+  return { actionData, actionSelector: selectorFromActionData(actionData), dataHash: ethers.keccak256(actionData) };
 }
 
 function selectorFor(contract: DeployedContract, signature: string): string {
@@ -185,8 +200,13 @@ async function invoke(contract: DeployedContract, methodName: string, args: read
 
 async function readProposal(govProposals: DeployedContract, proposalId: bigint): Promise<ProposalView> {
   const method = govProposals.getFunction("proposals");
-  const proposal = await method(proposalId) as { status: bigint; executableAt: bigint };
-  return { status: proposal.status, executableAt: proposal.executableAt };
+  const proposal = await method(proposalId) as { status: bigint; actionSelector: string; dataHash: string; executableAt: bigint };
+  return {
+    status: proposal.status,
+    actionSelector: proposal.actionSelector,
+    dataHash: proposal.dataHash,
+    executableAt: proposal.executableAt,
+  };
 }
 
 async function readBody(govCore: DeployedContract, bodyId: bigint): Promise<BodyView> {
@@ -304,15 +324,15 @@ async function createProposalForAction(
   context: ProtocolContext,
   proposalType: bigint,
   target: string,
-  action: { actionData: string; dataHash: string },
+  action: ProposalAction,
   value: bigint = 0n,
-): Promise<{ proposalId: bigint; actionData: string; dataHash: string; value: bigint }> {
+): Promise<{ proposalId: bigint; actionData: string; actionSelector: string; dataHash: string; value: bigint }> {
   const proposalId: bigint = await nextProposalId(context.govProposals);
-  await invoke(context.govProposals.connect(context.proposer), "createProposal", [context.orgA.orgId, proposalType, target, value, action.dataHash, `ipfs://proposal-${proposalId}`]);
-  return { proposalId, actionData: action.actionData, dataHash: action.dataHash, value };
+  await invoke(context.govProposals.connect(context.proposer), "createProposal", [context.orgA.orgId, proposalType, target, value, action.actionSelector, action.dataHash, `ipfs://proposal-${proposalId}`]);
+  return { proposalId, actionData: action.actionData, actionSelector: action.actionSelector, dataHash: action.dataHash, value };
 }
 
-async function createProposal(context: ProtocolContext, proposalType: bigint, target: string, number: bigint): Promise<{ proposalId: bigint; actionData: string; dataHash: string; value: bigint }> {
+async function createProposal(context: ProtocolContext, proposalType: bigint, target: string, number: bigint): Promise<{ proposalId: bigint; actionData: string; actionSelector: string; dataHash: string; value: bigint }> {
   const action = createAction(context.demoTarget, context.orgA.orgId, number);
   return createProposalForAction(context, proposalType, target, action);
 }
@@ -691,6 +711,24 @@ describe("Protocol v0.1", function () {
       .withArgs(context.orgA.orgId, context.orgB.bodies.councilBodyId);
   });
 
+  it("stores and emits selector-aware proposal action identity", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const target = await context.demoTarget.getAddress();
+    const action = createAction(context.demoTarget, context.orgA.orgId, 76n);
+    const proposalId = await nextProposalId(context.govProposals);
+    const metadataURI = `ipfs://proposal-${proposalId}`;
+    const rule = await readPolicyRule(context.govCore, context.orgA.orgId, PROPOSAL_TYPE.standard);
+    const createProposalFunction = context.govProposals.connect(context.proposer).getFunction("createProposal");
+
+    await expect(createProposalFunction(context.orgA.orgId, PROPOSAL_TYPE.standard, target, 0n, action.actionSelector, action.dataHash, metadataURI))
+      .to.emit(context.govProposals, "ProposalCreated")
+      .withArgs(context.orgA.orgId, proposalId, PROPOSAL_TYPE.standard, rule.version, context.proposer.address, target, 0n, action.actionSelector, action.dataHash, metadataURI);
+
+    const stored = await readProposal(context.govProposals, proposalId);
+    expect(stored.actionSelector).to.equal(action.actionSelector);
+    expect(stored.dataHash).to.equal(action.dataHash);
+  });
+
   it("executes a standard proposal end-to-end against an explicitly configured DemoTarget selector", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
     const target = await context.demoTarget.getAddress();
@@ -743,7 +781,11 @@ describe("Protocol v0.1", function () {
   it("rejects execution calldata shorter than a function selector", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
     const target = await context.demoTarget.getAddress();
-    const action = { actionData: "0x123456", dataHash: ethers.keccak256("0x123456") };
+    const action = {
+      actionData: "0x123456",
+      actionSelector: selectorFor(context.demoTarget, "setNumber(uint64,uint256)"),
+      dataHash: ethers.keccak256("0x123456"),
+    };
     const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
     await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
 
@@ -911,6 +953,24 @@ describe("Protocol v0.1", function () {
     )
       .to.be.revertedWithCustomError(context.govProposals, "InvalidProposalStatus")
       .withArgs(PROPOSAL_STATUS.vetoed);
+  });
+
+  it("blocks execution when calldata selector differs from the proposal action selector", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol();
+    const target = await context.demoTarget.getAddress();
+    const action = createAction(context.demoTarget, context.orgA.orgId, 332n);
+    const mismatchedAction: ProposalAction = {
+      ...action,
+      actionSelector: selectorFor(context.demoTarget, "setFeatureEnabled(uint64,bytes32,bool)"),
+    };
+    const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, mismatchedAction);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+    await expect(
+      invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, action.actionData]),
+    )
+      .to.be.revertedWithCustomError(context.govProposals, "ActionSelectorMismatch")
+      .withArgs(mismatchedAction.actionSelector, action.actionSelector);
   });
 
   it("blocks execution on data hash mismatch", async function (): Promise<void> {
