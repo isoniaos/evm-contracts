@@ -6,6 +6,18 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.8.0-alpha.4]
+
+### Added
+
+- Added optional org-scoped managed execution through `IsoOrgExecutor`, `IIsoOrgExecutor`, `GovProposals.setOrgExecutor`, `getOrgExecutor`, and `OrgExecutorUpdated`.
+- Added managed execution tests proving final-target action identity, executor caller isolation, executor boundary rejections, final target selector/value enforcement, cross-org isolation, and setup/finalization restrictions.
+
+### Changed
+
+- Updated `GovProposals.executeProposal` to keep the existing direct final-target call path when no org executor is configured and to forward the same final target/value/selector/data hash through the configured org executor when present.
+- Bumped package version to `0.8.0-alpha.4`.
+
 ## [0.8.0-alpha.3]
 
 ### Added
@@ -140,7 +152,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.3...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.4...HEAD
+[0.8.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.4
 [0.8.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.3
 [0.8.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.2
 [0.8.0-alpha.1]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.1

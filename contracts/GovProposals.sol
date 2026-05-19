@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {GovTypes} from "./GovTypes.sol";
 import {IGovCore} from "./interfaces/IGovCore.sol";
+import {IIsoOrgExecutor} from "./interfaces/IIsoOrgExecutor.sol";
 import {
     ZeroAddress,
     Unauthorized,
@@ -25,6 +26,8 @@ import {
     ActionSelectorMismatch,
     InvalidExecutionCalldata,
     ExecutionValueLimitExceeded,
+    InvalidOrgExecutor,
+    OrgExecutorOrgMismatch,
     InvalidExecutionValue,
     ExecutionFailed
 } from "./GovErrors.sol";
@@ -35,6 +38,7 @@ contract GovProposals {
 
     mapping(uint64 => mapping(address => GovTypes.ExecutionTargetRule)) public executionTargetRules;
     mapping(uint64 => mapping(address => mapping(bytes4 => bool))) public executionSelectorRules;
+    mapping(uint64 => address) public orgExecutors;
     mapping(uint64 => GovTypes.Proposal) public proposals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalApprovals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalVetoes;
@@ -42,6 +46,7 @@ contract GovProposals {
 
     event ExecutionTargetRuleUpdated(uint64 indexed orgId, address indexed target, bool enabled, uint256 maxValue, address indexed actor);
     event ExecutionSelectorRuleUpdated(uint64 indexed orgId, address indexed target, bytes4 selector, bool enabled, address actor);
+    event OrgExecutorUpdated(uint64 indexed orgId, address previousExecutor, address newExecutor, address actor);
     event ProposalCreated(
         uint64 indexed orgId,
         uint64 indexed proposalId,
@@ -99,6 +104,20 @@ contract GovProposals {
         }
         executionSelectorRules[orgId][target][selector] = enabled;
         emit ExecutionSelectorRuleUpdated(orgId, target, selector, enabled, msg.sender);
+    }
+
+    function setOrgExecutor(uint64 orgId, address newExecutor) external {
+        _requireBootstrapOrgAdmin(orgId);
+        if (newExecutor != address(0)) {
+            _requireCompatibleOrgExecutor(orgId, newExecutor);
+        }
+        address previousExecutor = orgExecutors[orgId];
+        orgExecutors[orgId] = newExecutor;
+        emit OrgExecutorUpdated(orgId, previousExecutor, newExecutor, msg.sender);
+    }
+
+    function getOrgExecutor(uint64 orgId) external view returns (address executor) {
+        executor = orgExecutors[orgId];
     }
 
     function isExecutionTargetAllowed(uint64 orgId, address target) external view returns (bool isAllowed) {
@@ -230,9 +249,22 @@ contract GovProposals {
         }
         _setProposalStatus(proposal, GovTypes.ProposalStatus.Executed);
         proposal.executedAt = _currentTimestamp();
-        (bool success, bytes memory result) = proposal.target.call{value: msg.value}(actionData);
-        if (!success) {
-            revert ExecutionFailed(result);
+        address managedExecutor = orgExecutors[proposal.orgId];
+        if (managedExecutor == address(0)) {
+            (bool success, bytes memory result) = proposal.target.call{value: msg.value}(actionData);
+            if (!success) {
+                revert ExecutionFailed(result);
+            }
+        } else {
+            IIsoOrgExecutor(managedExecutor).executeGovernedCall{value: msg.value}(
+                proposal.orgId,
+                proposalId,
+                proposal.target,
+                proposal.value,
+                proposal.actionSelector,
+                proposal.dataHash,
+                actionData
+            );
         }
         emit ProposalExecuted(orgId, proposalId, msg.sender, proposal.target, proposal.dataHash);
     }
@@ -253,6 +285,26 @@ contract GovProposals {
         }
         _setProposalStatus(proposal, GovTypes.ProposalStatus.Cancelled);
         emit ProposalCancelled(orgId, proposalId, msg.sender);
+    }
+
+    function _requireCompatibleOrgExecutor(uint64 orgId, address executor) internal view {
+        if (executor.code.length == 0) {
+            revert InvalidOrgExecutor(executor);
+        }
+        try IIsoOrgExecutor(executor).orgId() returns (uint64 executorOrgId) {
+            if (executorOrgId != orgId) {
+                revert OrgExecutorOrgMismatch(orgId, executorOrgId);
+            }
+        } catch {
+            revert InvalidOrgExecutor(executor);
+        }
+        try IIsoOrgExecutor(executor).govProposals() returns (address executorGovProposals) {
+            if (executorGovProposals != address(this)) {
+                revert InvalidOrgExecutor(executor);
+            }
+        } catch {
+            revert InvalidOrgExecutor(executor);
+        }
     }
 
     function _requireBootstrapOrgAdmin(uint64 orgId) internal view {

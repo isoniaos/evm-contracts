@@ -33,6 +33,8 @@ error ExecutionSelectorNotAllowed(uint64 orgId, address target, bytes4 selector)
 error ActionSelectorMismatch(bytes4 expectedSelector, bytes4 actualSelector);
 error InvalidExecutionCalldata();
 error ExecutionValueLimitExceeded(uint64 orgId, address target, uint256 limit, uint256 value);
+error InvalidOrgExecutor(address executor);
+error OrgExecutorOrgMismatch(uint64 expectedOrgId, uint64 actualOrgId);
 error InvalidOrganizationStatus(GovTypes.OrganizationStatus status);
 error InvalidStatusTransition(GovTypes.OrganizationStatus current, GovTypes.OrganizationStatus nextStatus);
 error InvalidBodyKind();

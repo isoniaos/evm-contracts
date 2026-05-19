@@ -5,8 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {GovCore} from "../GovCore.sol";
 import {GovProposals} from "../GovProposals.sol";
 import {DemoTarget} from "../DemoTarget.sol";
+import {IsoOrgExecutor} from "../execution/IsoOrgExecutor.sol";
 import {GovTypes} from "../GovTypes.sol";
 import {BodyDoesNotBelongToOrg, DataHashMismatch, InvalidProposalStatus} from "../GovErrors.sol";
+import {ManagedExecutionTarget} from "./ManagedExecutionTarget.sol";
 
 contract GovProtocolTest is Test {
     GovCore private govCore;
@@ -56,6 +58,36 @@ contract GovProtocolTest is Test {
         assertEq(demoTarget.number(), newNumber);
         assertEq(demoTarget.lastOrgId(), orgId);
         assertEq(demoTarget.lastActionHash(), keccak256(actionData));
+    }
+
+    function test_ManagedExecutorCallsFinalTargetAsOrgExecutor() public {
+        IsoOrgExecutor orgExecutor = new IsoOrgExecutor(address(govProposals), orgId);
+        vm.prank(orgAdmin);
+        govProposals.setOrgExecutor(orgId, address(orgExecutor));
+        ManagedExecutionTarget managedTarget = new ManagedExecutionTarget(address(orgExecutor));
+        vm.prank(orgAdmin);
+        govProposals.setExecutionTargetRule(orgId, address(managedTarget), true, 0);
+        vm.prank(orgAdmin);
+        govProposals.setExecutionSelectorRule(orgId, address(managedTarget), ManagedExecutionTarget.setNumber.selector, true);
+        bytes memory actionData = abi.encodeCall(ManagedExecutionTarget.setNumber, (orgId, uint256(77)));
+        vm.prank(proposer);
+        uint64 proposalId = govProposals.createProposal(
+            orgId,
+            GovTypes.ProposalType.Standard,
+            address(managedTarget),
+            0,
+            ManagedExecutionTarget.setNumber.selector,
+            keccak256(actionData),
+            "ipfs://managed-proposal"
+        );
+        vm.prank(approver);
+        govProposals.approveProposal(orgId, proposalId, bodyId);
+        vm.prank(executor);
+        govProposals.executeProposal(orgId, proposalId, actionData);
+        assertEq(managedTarget.lastCaller(), address(orgExecutor));
+        assertEq(managedTarget.number(), 77);
+        assertEq(managedTarget.lastOrgId(), orgId);
+        assertEq(managedTarget.lastActionHash(), keccak256(actionData));
     }
 
     function testFuzz_RevokedMandateNeverAuthorizes(uint8 proposalTypeSeed) public {

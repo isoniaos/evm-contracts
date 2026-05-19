@@ -16,6 +16,7 @@ Active development target: v0.8 alpha accountability and integration-preview con
 - policy rules
 - proposal lifecycle
 - organization-scoped execution target and selector registry
+- optional organization-scoped managed executor baseline
 - deterministic local proof-of-execution events for demo accountability flows
 
 ## Protocol Notes
@@ -37,6 +38,20 @@ Proposals now carry a compact protocol-level action identity: `target`, `value`,
 Execution still enforces proposal status, approvals, vetoes, timelocks, executor role, exact full-calldata `dataHash`, and exact `msg.value`. Full calldata remains supplied at execution time and must hash to the proposal's stored `dataHash`. Registry updates emit `ExecutionTargetRuleUpdated` and `ExecutionSelectorRuleUpdated`, while `ProposalCreated` includes `actionSelector`, so downstream indexers can observe proposal intent and governance execution permissions without decoding arbitrary target-contract events.
 
 Target contract behavior and events are execution evidence only. They are not universal governance authority and do not prove that external work, manual evidence, or offchain integrations are complete.
+
+### v0.8 Optional Managed Org Executor
+
+v0.8 also includes an optional alpha managed execution path for client contracts that need to hand ownership or roles to an organization-scoped caller. `GovProposals` can store one setup-time executor address per organization through `setOrgExecutor(orgId, executor)` and exposes it through `getOrgExecutor(orgId)`.
+
+Proposals still describe the final client target call, not an executor wrapper call. The protocol-level action identity remains `target`, `value`, `actionSelector`, and `dataHash`, where `target` is the final client contract, `value` is the native value intended for that final target, `actionSelector` is the final target selector, and `dataHash` is `keccak256(final target calldata)`.
+
+When no org executor is configured, `GovProposals` keeps the existing direct final-target call path for local and backwards compatibility. When an org executor is configured, `GovProposals` still validates the proposal route, final target permission, final selector permission, value limit, selector match, data hash, and exact `msg.value` before forwarding the final target call to `IsoOrgExecutor`. The executor then calls the final target and emits `ManagedCallExecuted`.
+
+`IsoOrgExecutor` is scoped to one immutable `orgId` and one immutable `GovProposals` address. It has no company/global operator path, does not use `delegatecall`, and does not decode arbitrary customer ABIs beyond selector, value, and data-hash verification. It is a scoped caller and authority bridge for client-contract handoff, not a global Isonia superadmin.
+
+Free-form function names, human-readable signatures, and strings are metadata only and are not enforcement authority. Target-contract events remain evidence unless a future protocol change explicitly models them as authority.
+
+This alpha baseline does not include parameter constraints, an executor factory, proxy patterns, AccessControl or AccessManager adapters, Safe modules, Snapshot/Tally/Agora integrations, ABI upload/decoding, or a central event hub.
 
 ### v0.8 Local/Lab Demo Target
 
@@ -64,7 +79,7 @@ The v0.7 alpha protocol includes explicit bootstrap finalization. The organizati
 
 Finalization is irreversible in this alpha and emits `OrganizationFinalized`. `isOrganizationFinalized(orgId)` exposes the on-chain finalization state while existing read paths remain available.
 
-After finalization, bootstrap admin mutation functions are blocked for bodies, roles, mandates, policy rules, typed batch activation, and the existing admin-only configuration/update paths. Future emergency/recovery and governance-controlled post-finalization configuration changes remain open design areas and are not implemented here.
+After finalization, bootstrap admin mutation functions are blocked for bodies, roles, mandates, policy rules, typed batch activation, execution target/selector registry updates, org executor configuration, and the existing admin-only configuration/update paths. Future emergency/recovery and governance-controlled post-finalization configuration changes remain open design areas and are not implemented here.
 
 ### Admin Batch Activation
 

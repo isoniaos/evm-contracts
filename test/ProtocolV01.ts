@@ -193,6 +193,12 @@ async function readBoolean(contract: DeployedContract, methodName: string, args:
   return result as boolean;
 }
 
+async function readAddress(contract: DeployedContract, methodName: string, args: readonly unknown[] = []): Promise<string> {
+  const method = contract.getFunction(methodName);
+  const result: unknown = await method(...args);
+  return result as string;
+}
+
 async function invoke(contract: DeployedContract, methodName: string, args: readonly unknown[] = []): Promise<void> {
   const method = contract.getFunction(methodName);
   await method(...args);
@@ -298,6 +304,10 @@ async function configureExecutionSelector(
   selector: string,
 ): Promise<void> {
   await invoke(govProposals.connect(orgAdmin), "setExecutionSelectorRule", [orgId, target, selector, true]);
+}
+
+async function deployOrgExecutor(govProposals: DeployedContract, orgId: bigint): Promise<DeployedContract> {
+  return await ethers.deployContract("IsoOrgExecutor", [await govProposals.getAddress(), orgId]) as unknown as DeployedContract;
 }
 
 async function configureDemoTargetExecutionRules(context: ProtocolContext): Promise<void> {
@@ -681,12 +691,16 @@ describe("Protocol v0.1", function () {
       const context: ProtocolContext = await deployProtocol();
       const target = await context.demoTarget.getAddress();
       const selector = selectorFor(context.demoTarget, "setNumber(uint64,uint256)");
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
       await finalizeOrganization(context.govCore, context.orgAdminA, context.orgA.orgId);
 
       await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionTargetRule", [context.orgA.orgId, target, false, 0n]))
         .to.be.revertedWithCustomError(context.govProposals, "OrganizationAlreadyFinalized")
         .withArgs(context.orgA.orgId);
       await expect(invoke(context.govProposals.connect(context.orgAdminA), "setExecutionSelectorRule", [context.orgA.orgId, target, selector, false]))
+        .to.be.revertedWithCustomError(context.govProposals, "OrganizationAlreadyFinalized")
+        .withArgs(context.orgA.orgId);
+      await expect(invoke(context.govProposals.connect(context.orgAdminA), "setOrgExecutor", [context.orgA.orgId, await orgExecutor.getAddress()]))
         .to.be.revertedWithCustomError(context.govProposals, "OrganizationAlreadyFinalized")
         .withArgs(context.orgA.orgId);
     });
@@ -736,13 +750,189 @@ describe("Protocol v0.1", function () {
     const proposal = await createProposal(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), 77n);
     expect(await readBoolean(context.govProposals, "isExecutionTargetAllowed", [context.orgA.orgId, target])).to.equal(true);
     expect(await readBoolean(context.govProposals, "isExecutionSelectorAllowed", [context.orgA.orgId, target, selector])).to.equal(true);
+    expect(await readAddress(context.govProposals, "getOrgExecutor", [context.orgA.orgId])).to.equal(ethers.ZeroAddress);
     await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
     await invoke(context.govProposals.connect(context.outsider), "queueProposal", [context.orgA.orgId, proposal.proposalId]);
-    await invoke(context.govProposals.connect(context.executor), "executeProposal", [context.orgA.orgId, proposal.proposalId, proposal.actionData]);
+    const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+    await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+      .to.emit(context.govProposals, "ProposalExecuted")
+      .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.dataHash);
     const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
     expect(proposalState.status).to.equal(PROPOSAL_STATUS.executed);
     expect(await readBigInt(context.demoTarget, "number")).to.equal(77n);
     expect(await readBigInt(context.demoTarget, "lastOrgId")).to.equal(context.orgA.orgId);
+  });
+
+  describe("v0.8 managed org executor", function () {
+    it("configures an org-scoped executor during bootstrap and exposes it for reads", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      const orgExecutorAddress = await orgExecutor.getAddress();
+      const setOrgExecutor = context.govProposals.connect(context.orgAdminA).getFunction("setOrgExecutor");
+
+      await expect(setOrgExecutor(context.orgA.orgId, orgExecutorAddress))
+        .to.emit(context.govProposals, "OrgExecutorUpdated")
+        .withArgs(context.orgA.orgId, ethers.ZeroAddress, orgExecutorAddress, context.orgAdminA.address);
+
+      expect(await readAddress(context.govProposals, "getOrgExecutor", [context.orgA.orgId])).to.equal(orgExecutorAddress);
+    });
+
+    it("executes the final target through the org executor while preserving proposal action identity", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol({ configureDemoTarget: false });
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      const orgExecutorAddress = await orgExecutor.getAddress();
+      await invoke(context.govProposals.connect(context.orgAdminA), "setOrgExecutor", [context.orgA.orgId, orgExecutorAddress]);
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [orgExecutorAddress]) as unknown as DeployedContract;
+      const target = await managedTarget.getAddress();
+      await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+      await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selectorFor(managedTarget, "setNumber(uint64,uint256)"));
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 177n]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+        .to.emit(managedTarget, "NumberSet")
+        .withArgs(context.orgA.orgId, 177n, 0n, orgExecutorAddress)
+        .and.to.emit(orgExecutor, "ManagedCallExecuted")
+        .withArgs(context.orgA.orgId, proposal.proposalId, target, orgExecutorAddress, 0n, proposal.actionSelector, proposal.dataHash)
+        .and.to.emit(context.govProposals, "ProposalExecuted")
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.dataHash);
+
+      expect(await readAddress(managedTarget, "lastCaller")).to.equal(orgExecutorAddress);
+      expect(await readAddress(managedTarget, "lastCaller")).to.not.equal(await context.govProposals.getAddress());
+      expect(await readBigInt(managedTarget, "number")).to.equal(177n);
+      expect(await readBigInt(managedTarget, "lastOrgId")).to.equal(context.orgA.orgId);
+      expect(await readBigInt(managedTarget, "lastValue")).to.equal(0n);
+      const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
+      expect(proposalState.dataHash).to.equal(proposal.dataHash);
+    });
+
+    it("rejects direct executor calls from non-GovProposals callers", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 178n]);
+      const executeGovernedCall = orgExecutor.connect(context.outsider).getFunction("executeGovernedCall");
+
+      await expect(executeGovernedCall(context.orgA.orgId, 1n, await managedTarget.getAddress(), 0n, action.actionSelector, action.dataHash, action.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "Unauthorized")
+        .withArgs(context.outsider.address);
+    });
+
+    it("rejects wrong org ids at the org executor boundary", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const harness = await ethers.deployContract("IsoOrgExecutorCallerHarness") as unknown as DeployedContract;
+      const orgExecutor = await ethers.deployContract("IsoOrgExecutor", [await harness.getAddress(), context.orgA.orgId]) as unknown as DeployedContract;
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 179n]);
+      const harnessExecute = harness.getFunction("execute");
+
+      await expect(harnessExecute(await orgExecutor.getAddress(), context.orgB.orgId, 1n, await managedTarget.getAddress(), 0n, action.actionSelector, action.dataHash, action.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "OrgExecutorOrgMismatch")
+        .withArgs(context.orgA.orgId, context.orgB.orgId);
+    });
+
+    it("rejects short calldata at the org executor boundary", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const harness = await ethers.deployContract("IsoOrgExecutorCallerHarness") as unknown as DeployedContract;
+      const orgExecutor = await ethers.deployContract("IsoOrgExecutor", [await harness.getAddress(), context.orgA.orgId]) as unknown as DeployedContract;
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const shortActionData = "0x123456";
+      const harnessExecute = harness.getFunction("execute");
+
+      await expect(harnessExecute(await orgExecutor.getAddress(), context.orgA.orgId, 1n, await managedTarget.getAddress(), 0n, "0x12345678", ethers.keccak256(shortActionData), shortActionData))
+        .to.be.revertedWithCustomError(orgExecutor, "InvalidExecutionCalldata");
+    });
+
+    it("rejects selector mismatches at the org executor boundary", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const harness = await ethers.deployContract("IsoOrgExecutorCallerHarness") as unknown as DeployedContract;
+      const orgExecutor = await ethers.deployContract("IsoOrgExecutor", [await harness.getAddress(), context.orgA.orgId]) as unknown as DeployedContract;
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 180n]);
+      const harnessExecute = harness.getFunction("execute");
+
+      await expect(harnessExecute(await orgExecutor.getAddress(), context.orgA.orgId, 1n, await managedTarget.getAddress(), 0n, "0x12345678", action.dataHash, action.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "ActionSelectorMismatch")
+        .withArgs("0x12345678", action.actionSelector);
+    });
+
+    it("rejects data hash mismatches at the org executor boundary", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const harness = await ethers.deployContract("IsoOrgExecutorCallerHarness") as unknown as DeployedContract;
+      const orgExecutor = await ethers.deployContract("IsoOrgExecutor", [await harness.getAddress(), context.orgA.orgId]) as unknown as DeployedContract;
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 181n]);
+      const harnessExecute = harness.getFunction("execute");
+
+      await expect(harnessExecute(await orgExecutor.getAddress(), context.orgA.orgId, 1n, await managedTarget.getAddress(), 0n, action.actionSelector, ethers.ZeroHash, action.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "DataHashMismatch")
+        .withArgs(ethers.ZeroHash, action.dataHash);
+    });
+
+    it("rejects msg.value mismatches at the org executor boundary", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const harness = await ethers.deployContract("IsoOrgExecutorCallerHarness") as unknown as DeployedContract;
+      const orgExecutor = await ethers.deployContract("IsoOrgExecutor", [await harness.getAddress(), context.orgA.orgId]) as unknown as DeployedContract;
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 182n]);
+      const harnessExecute = harness.getFunction("execute");
+
+      await expect(harnessExecute(await orgExecutor.getAddress(), context.orgA.orgId, 1n, await managedTarget.getAddress(), 1n, action.actionSelector, action.dataHash, action.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "InvalidExecutionValue")
+        .withArgs(1n, 0n);
+    });
+
+    it("keeps final target selector and value limits enforced before managed execution", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol({ configureDemoTarget: false });
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      await invoke(context.govProposals.connect(context.orgAdminA), "setOrgExecutor", [context.orgA.orgId, await orgExecutor.getAddress()]);
+      const managedTarget = await ethers.deployContract("ManagedExecutionTarget", [await orgExecutor.getAddress()]) as unknown as DeployedContract;
+      const target = await managedTarget.getAddress();
+      const selector = selectorFor(managedTarget, "setNumber(uint64,uint256)");
+      await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+      const action = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 183n]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+        .to.be.revertedWithCustomError(context.govProposals, "ExecutionSelectorNotAllowed")
+        .withArgs(context.orgA.orgId, target, selector);
+
+      await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selector);
+      await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target, 0n);
+      const valueAction = createTargetAction(managedTarget, "setNumber", [context.orgA.orgId, 184n]);
+      const valueProposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, valueAction, 1n);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, valueProposal.proposalId, context.orgA.bodies.councilBodyId]);
+
+      await expect(executeProposal(context.orgA.orgId, valueProposal.proposalId, valueProposal.actionData, { value: 1n }))
+        .to.be.revertedWithCustomError(context.govProposals, "ExecutionValueLimitExceeded")
+        .withArgs(context.orgA.orgId, target, 0n, 1n);
+    });
+
+    it("rejects cross-org executor configuration and cross-org admin updates", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      const orgExecutorAddress = await orgExecutor.getAddress();
+
+      await expect(invoke(context.govProposals.connect(context.orgAdminB), "setOrgExecutor", [context.orgA.orgId, orgExecutorAddress]))
+        .to.be.revertedWithCustomError(context.govProposals, "Unauthorized")
+        .withArgs(context.orgAdminB.address);
+      await expect(invoke(context.govProposals.connect(context.orgAdminB), "setOrgExecutor", [context.orgB.orgId, orgExecutorAddress]))
+        .to.be.revertedWithCustomError(context.govProposals, "OrgExecutorOrgMismatch")
+        .withArgs(context.orgB.orgId, context.orgA.orgId);
+    });
+
+    it("rejects executor configuration for invalid organizations", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol();
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+
+      await expect(invoke(context.govProposals.connect(context.orgAdminA), "setOrgExecutor", [999n, await orgExecutor.getAddress()]))
+        .to.be.revertedWithCustomError(context.govProposals, "OrganizationNotActive")
+        .withArgs(999n);
+    });
   });
 
   it("keeps local DemoTarget execution blocked until explicit registry configuration is set", async function (): Promise<void> {
