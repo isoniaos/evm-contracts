@@ -45,7 +45,11 @@ v0.8 also includes an optional alpha managed execution path for client contracts
 
 Proposals still describe the final client target call, not an executor wrapper call. The protocol-level action identity remains `target`, `value`, `actionSelector`, and `dataHash`, where `target` is the final client contract, `value` is the native value intended for that final target, `actionSelector` is the final target selector, and `dataHash` is `keccak256(final target calldata)`.
 
-When no org executor is configured, `GovProposals` keeps the existing direct final-target call path for local and backwards compatibility. When an org executor is configured, `GovProposals` still validates the proposal route, final target permission, final selector permission, value limit, selector match, data hash, and exact `msg.value` before forwarding the final target call to `IsoOrgExecutor`. The executor then calls the final target and emits `ManagedCallExecuted`.
+When no org executor is configured, `GovProposals` keeps the existing direct final-target call path for local and backwards compatibility. When an org executor is configured, `GovProposals` still validates the proposal route, final target permission, final selector permission, value limit, selector match, data hash, and exact `msg.value` before forwarding the final target call to `IsoOrgExecutor`.
+
+`ProposalExecuted` is the canonical protocol execution receipt. It records the IsoniaOS executor role holder that called `executeProposal`, the final client `target`, final native `value`, final `actionSelector`, final calldata `dataHash`, and the `managedExecutor` used for the call. `managedExecutor` is `address(0)` for direct execution and the configured org executor address for managed execution.
+
+`IsoOrgExecutor` also emits `ManagedCallExecuted` after a successful managed call. That event is executor-local supporting evidence for the org-scoped authority bridge; it is not required for core protocol indexing when `ProposalExecuted` is available from `GovProposals`.
 
 `IsoOrgExecutor` is scoped to one immutable `orgId` and one immutable `GovProposals` address. It has no company/global operator path, does not use `delegatecall`, and does not decode arbitrary customer ABIs beyond selector, value, and data-hash verification. It is a scoped caller and authority bridge for client-contract handoff, not a global Isonia superadmin.
 

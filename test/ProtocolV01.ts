@@ -161,6 +161,14 @@ function selectorFor(contract: DeployedContract, signature: string): string {
   return fragment.selector;
 }
 
+function eventTopic(contract: DeployedContract, eventName: string): string {
+  const fragment = contract.interface.getEvent(eventName);
+  if (fragment === null) {
+    throw new Error(`Unknown event name: ${eventName}`);
+  }
+  return fragment.topicHash;
+}
+
 async function nextOrgId(govCore: DeployedContract): Promise<bigint> {
   return readBigInt(govCore, "nextOrgId");
 }
@@ -202,6 +210,20 @@ async function readAddress(contract: DeployedContract, methodName: string, args:
 async function invoke(contract: DeployedContract, methodName: string, args: readonly unknown[] = []): Promise<void> {
   const method = contract.getFunction(methodName);
   await method(...args);
+}
+
+async function expectNoPersistedEventLogSince(blockBefore: number, contract: DeployedContract, contractAddress: string, eventName: string): Promise<void> {
+  const latestBlock = await ethers.provider.getBlockNumber();
+  if (latestBlock <= blockBefore) {
+    return;
+  }
+  const logs = await ethers.provider.getLogs({
+    address: contractAddress,
+    fromBlock: blockBefore + 1,
+    toBlock: latestBlock,
+    topics: [eventTopic(contract, eventName)],
+  });
+  expect(logs).to.have.length(0);
 }
 
 async function readProposal(govProposals: DeployedContract, proposalId: bigint): Promise<ProposalView> {
@@ -756,11 +778,30 @@ describe("Protocol v0.1", function () {
     const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
     await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
       .to.emit(context.govProposals, "ProposalExecuted")
-      .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.dataHash);
+      .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.value, proposal.actionSelector, proposal.dataHash, ethers.ZeroAddress);
     const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
     expect(proposalState.status).to.equal(PROPOSAL_STATUS.executed);
     expect(await readBigInt(context.demoTarget, "number")).to.equal(77n);
     expect(await readBigInt(context.demoTarget, "lastOrgId")).to.equal(context.orgA.orgId);
+  });
+
+  it("does not emit a successful proposal receipt when direct final-target execution fails", async function (): Promise<void> {
+    const context: ProtocolContext = await deployProtocol({ configureDemoTarget: false });
+    const failingTarget = await ethers.deployContract("ManagedExecutionTarget", [context.outsider.address]) as unknown as DeployedContract;
+    const target = await failingTarget.getAddress();
+    await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+    await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selectorFor(failingTarget, "setNumber(uint64,uint256)"));
+    const action = createTargetAction(failingTarget, "setNumber", [context.orgA.orgId, 171n]);
+    const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+    await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+    const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+    const blockBefore = await ethers.provider.getBlockNumber();
+
+    await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+      .to.be.revertedWithCustomError(context.govProposals, "ExecutionFailed");
+    await expectNoPersistedEventLogSince(blockBefore, context.govProposals, await context.govProposals.getAddress(), "ProposalExecuted");
+    const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
+    expect(proposalState.status).to.equal(PROPOSAL_STATUS.approved);
   });
 
   describe("v0.8 managed org executor", function () {
@@ -797,7 +838,7 @@ describe("Protocol v0.1", function () {
         .and.to.emit(orgExecutor, "ManagedCallExecuted")
         .withArgs(context.orgA.orgId, proposal.proposalId, target, orgExecutorAddress, 0n, proposal.actionSelector, proposal.dataHash)
         .and.to.emit(context.govProposals, "ProposalExecuted")
-        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.dataHash);
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, target, proposal.value, proposal.actionSelector, proposal.dataHash, orgExecutorAddress);
 
       expect(await readAddress(managedTarget, "lastCaller")).to.equal(orgExecutorAddress);
       expect(await readAddress(managedTarget, "lastCaller")).to.not.equal(await context.govProposals.getAddress());
@@ -806,6 +847,29 @@ describe("Protocol v0.1", function () {
       expect(await readBigInt(managedTarget, "lastValue")).to.equal(0n);
       const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
       expect(proposalState.dataHash).to.equal(proposal.dataHash);
+    });
+
+    it("does not emit successful proposal or managed-call receipts when managed final-target execution fails", async function (): Promise<void> {
+      const context: ProtocolContext = await deployProtocol({ configureDemoTarget: false });
+      const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
+      const orgExecutorAddress = await orgExecutor.getAddress();
+      await invoke(context.govProposals.connect(context.orgAdminA), "setOrgExecutor", [context.orgA.orgId, orgExecutorAddress]);
+      const failingTarget = await ethers.deployContract("ManagedExecutionTarget", [context.outsider.address]) as unknown as DeployedContract;
+      const target = await failingTarget.getAddress();
+      await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
+      await configureExecutionSelector(context.govProposals, context.orgAdminA, context.orgA.orgId, target, selectorFor(failingTarget, "setNumber(uint64,uint256)"));
+      const action = createTargetAction(failingTarget, "setNumber", [context.orgA.orgId, 172n]);
+      const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, target, action);
+      await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
+      const executeProposal = context.govProposals.connect(context.executor).getFunction("executeProposal");
+      const blockBefore = await ethers.provider.getBlockNumber();
+
+      await expect(executeProposal(context.orgA.orgId, proposal.proposalId, proposal.actionData))
+        .to.be.revertedWithCustomError(orgExecutor, "ExecutionFailed");
+      await expectNoPersistedEventLogSince(blockBefore, context.govProposals, await context.govProposals.getAddress(), "ProposalExecuted");
+      await expectNoPersistedEventLogSince(blockBefore, orgExecutor, orgExecutorAddress, "ManagedCallExecuted");
+      const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
+      expect(proposalState.status).to.equal(PROPOSAL_STATUS.approved);
     });
 
     it("rejects direct executor calls from non-GovProposals callers", async function (): Promise<void> {
@@ -1042,7 +1106,7 @@ describe("Protocol v0.1", function () {
         .to.emit(context.demoTarget, "FeatureEnabledSet")
         .withArgs(context.orgA.orgId, feature, true)
         .and.to.emit(context.govProposals, "ProposalExecuted")
-        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.value, proposal.actionSelector, proposal.dataHash, ethers.ZeroAddress);
 
       expect(await readBoolean(context.demoTarget, "featureEnabled", [context.orgA.orgId, feature])).to.equal(true);
       const proposalState: ProposalView = await readProposal(context.govProposals, proposal.proposalId);
@@ -1061,7 +1125,7 @@ describe("Protocol v0.1", function () {
         .to.emit(context.demoTarget, "ObligationAccepted")
         .withArgs(context.orgA.orgId, obligationId)
         .and.to.emit(context.govProposals, "ProposalExecuted")
-        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.value, proposal.actionSelector, proposal.dataHash, ethers.ZeroAddress);
 
       expect(await readBoolean(context.demoTarget, "obligationAccepted", [context.orgA.orgId, obligationId])).to.equal(true);
     });
@@ -1080,7 +1144,7 @@ describe("Protocol v0.1", function () {
         .to.emit(context.demoTarget, "NativePaymentReleased")
         .withArgs(context.orgA.orgId, obligationId, context.outsider.address, payment)
         .and.to.emit(context.govProposals, "ProposalExecuted")
-        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.dataHash);
+        .withArgs(context.orgA.orgId, proposal.proposalId, context.executor.address, await context.demoTarget.getAddress(), proposal.value, proposal.actionSelector, proposal.dataHash, ethers.ZeroAddress);
 
       expect(await ethers.provider.getBalance(context.outsider.address)).to.equal(recipientBalanceBefore + payment);
     });

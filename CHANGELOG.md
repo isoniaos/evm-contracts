@@ -6,6 +6,14 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+## [0.8.0-alpha.5]
+
+### Changed
+
+- Enriched `GovProposals.ProposalExecuted` as the canonical protocol execution receipt with final target, value, action selector, data hash, and managed executor disclosure.
+- Documented `IsoOrgExecutor.ManagedCallExecuted` as executor-local supporting evidence that is not required for core protocol indexing.
+- Bumped package version to `0.8.0-alpha.5`.
+
 ## [0.8.0-alpha.4]
 
 ### Added

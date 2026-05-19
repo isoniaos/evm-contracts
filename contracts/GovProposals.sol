@@ -62,7 +62,16 @@ contract GovProposals {
     event ProposalApproved(uint64 indexed orgId, uint64 indexed proposalId, uint64 indexed bodyId, address actor);
     event ProposalVetoed(uint64 indexed orgId, uint64 indexed proposalId, uint64 indexed bodyId, address actor);
     event ProposalQueued(uint64 indexed orgId, uint64 indexed proposalId, uint64 queuedAt, uint64 executableAt);
-    event ProposalExecuted(uint64 indexed orgId, uint64 indexed proposalId, address indexed executor, address target, bytes32 dataHash);
+    event ProposalExecuted(
+        uint64 indexed orgId,
+        uint64 indexed proposalId,
+        address indexed executor,
+        address target,
+        uint256 value,
+        bytes4 actionSelector,
+        bytes32 dataHash,
+        address managedExecutor
+    );
     event ProposalCancelled(uint64 indexed orgId, uint64 indexed proposalId, address indexed actor);
     event ProposalStatusChanged(
         uint64 indexed orgId,
@@ -266,7 +275,16 @@ contract GovProposals {
                 actionData
             );
         }
-        emit ProposalExecuted(orgId, proposalId, msg.sender, proposal.target, proposal.dataHash);
+        emit ProposalExecuted(
+            orgId,
+            proposalId,
+            msg.sender,
+            proposal.target,
+            proposal.value,
+            proposal.actionSelector,
+            proposal.dataHash,
+            managedExecutor
+        );
     }
 
     function cancelProposal(uint64 orgId, uint64 proposalId) external {
