@@ -2,6 +2,8 @@
 
 These rules apply to Codex and other AI agents working in `evm-contracts`.
 
+When this repository is used inside the IsoniaOS workspace, read the workspace-level `../AGENTS.md` first, then return to this file for repository-specific instructions.
+
 ## Repository Purpose
 
 `evm-contracts` is the source of onchain protocol authority for modeled IsoniaOS governance state.
