@@ -1,66 +1,71 @@
-# IsoniaOS EVM Contracts Agent Rules
+# IsoniaOS EVM Contracts Agent Instructions
 
-These rules apply to Codex and other AI agents working in `evm-contracts`.
+## Scope
 
-When this repository is used inside the IsoniaOS workspace, read the workspace-level `../AGENTS.md` first, then return to this file for repository-specific instructions.
+This repository owns the Solidity protocol contracts, local deployment scripts, seed tooling, and tests for modeled IsoniaOS governance authority.
 
-## Repository Purpose
+It does not own ISO token contracts, Control Plane projections, SDK clients, App Core UI, SaaS behavior, provider experiments, or public documentation site content.
 
-`evm-contracts` is the source of onchain protocol authority for modeled IsoniaOS governance state.
+## Workspace Instruction Chain
 
-Contracts define the authoritative state for organizations, bodies, roles, mandates, policy rules, proposal lifecycle, approvals, vetoes, timelocks, queue state, and execution state.
+When working inside the private IsoniaOS workspace, read:
 
-Control Plane, SDK, App Core, external tools, manual accountability records, and templates must not be treated as protocol authority.
+1. `../AGENTS.md`
+2. `../CURRENT_ROADMAP.md`
+3. relevant `../private-docs/` index, governance, roadmap, and migration docs
+4. this repository `AGENTS.md`
+5. this repository `/docs` and `README.md`
+6. current source/config files before editing
 
-## Active Target
+If this repository is cloned standalone, use this file as the local agent entry point and avoid relying on private workspace-only paths.
 
-Current active target: v0.8 accountability and integration-preview wave.
+## Stack and Commands
 
-The contract core should be production-shaped and generic. Do not build demo-specific, customer-specific, provider-experiment, or presentation-harness logic into audited/protocol core.
+- Solidity contracts under `contracts/`
+- Hardhat 3 with TypeScript config in `hardhat.config.ts`
+- Ignition local deployment module under `ignition/modules/`
+- Optional Foundry configuration in `foundry.toml`
 
-## Boundaries
+Useful commands:
 
-Do:
+```bash
+corepack pnpm install
+corepack pnpm test
+corepack pnpm node:local
+corepack pnpm deploy:local
+corepack pnpm seed:local
+forge test
+git diff --check
+```
 
-- keep protocol behavior explicit and first-party;
-- preserve `orgId` isolation;
-- keep policy snapshot/version semantics intact;
-- keep demo contracts, mocks, fixtures, and local proof targets isolated from the protocol core;
-- treat demo target events as local proof only, not proof that external work completed;
-- keep package versions, dependency refs, and changelog entries consistent when a release task is scoped;
-- update `CHANGELOG.md` under `Unreleased` for user-visible contract changes.
+`forge test` applies only when Foundry is installed.
 
-Do not:
+## Development Principles
 
-- implement ISO launch tokenomics unless explicitly scoped;
-- treat demo or provider-compatibility voting tokens as ISO launch tokenomics or production governance eligibility;
-- hardcode Snapshot, Safe, Tally, Agora, Sepolia lab fixtures, customer ABIs, or presentation records into the protocol core;
-- add SaaS-only behavior;
-- create Git tags automatically;
-- introduce production, audit, public beta, legal, provider-completeness, or ISO launch-readiness claims.
+- Keep protocol behavior explicit, generic, and first-party.
+- Preserve `orgId` isolation, policy snapshot/version semantics, proposal lifecycle semantics, and execution checks.
+- Treat contracts as authoritative only for the state they model.
+- Keep demo contracts, mocks, fixtures, local proof targets, and presentation harnesses isolated from protocol core.
+- Treat target-contract events and external records as evidence or context unless a protocol change explicitly models them as authority.
+- Keep type safety, NatSpec clarity, and migration safety proportional to the behavior being changed.
+- Do not implement ISO tokenomics or launch-token behavior here.
+- Do not add SaaS-only behavior or provider-specific assumptions to protocol core.
+- Do not make production, audit, public beta, legal, provider-completeness, grant, ISO launch, or token launch readiness claims without a scoped evidence gate.
 
-## Late-v0.8 Hardening Backlog
+## Documentation Rules
 
-When explicitly scoped, late-v0.8 contract hardening should include:
+Update [`README.md`](README.md), [`docs/`](docs/), and `CHANGELOG.md` under `Unreleased` when contract behavior, deployment commands, configuration, event surfaces, or authority boundaries change.
 
-- `Gov` to `Iso` naming cleanup where code should represent the current protocol vocabulary;
-- demo and mocks isolation review;
-- NatSpec coverage;
-- Solidity function ordering cleanup;
-- test coverage review;
-- gas reports;
-- removal of version names from Ignition modules and scripts where code should represent current state;
-- security/audit-readiness review with focus on authority, execution, access control, tenant isolation, and integration trust boundaries.
+Update the public docs repository when changes affect public developers, operators, users, or public claims. Use the smallest relevant public page and avoid duplicating private strategy.
 
-Do not mix this hardening wave into unrelated feature work unless the task explicitly asks for it.
-
-## Verification
+## Testing and Validation
 
 For contract behavior changes, run the strongest relevant subset:
 
-- `corepack pnpm lint`
-- `corepack pnpm test`
-- `corepack pnpm build`
-- `git diff --check`
+```bash
+corepack pnpm test
+forge test
+git diff --check
+```
 
-For AGENTS-only or documentation-only changes, `git diff --check` is sufficient unless local instructions require more.
+For documentation-only changes, `git diff --check` is normally sufficient. Run contract tests when the documentation edits reveal a behavior or command mismatch that needs verification.

@@ -1,180 +1,90 @@
 # IsoniaOS EVM Contracts
 
-EVM smart contracts for the IsoniaOS governance architecture protocol.
+This repository owns the EVM smart contracts for modeled IsoniaOS governance authority. It contains the Solidity protocol contracts, local deployment scripts, seed tooling, and tests used by downstream Control Plane, SDK, and App Core work.
 
-## Status
+The public developer overview is in the public docs repository at [site/developers/contracts.md](https://github.com/isoniaos/docs/blob/main/site/developers/contracts.md). Local authority boundaries and contract surface notes are maintained in [`docs/protocol-boundaries.md`](docs/protocol-boundaries.md).
 
-Active development target: v0.8 alpha accountability and integration-preview contract wave on top of the v0.7 protocol hardening foundation.
+## Installation
 
-## Scope
+Requires Node.js 22 or newer and pnpm through Corepack.
 
-- shared multi-organization governance protocol
-- organizations
-- bodies
-- roles
-- mandates
-- policy rules
-- proposal lifecycle
-- organization-scoped execution target and selector registry
-- optional organization-scoped managed executor baseline
-- deterministic local proof-of-execution events for demo accountability flows
+```bash
+corepack pnpm install
+```
 
-## Protocol Notes
+The repository also includes [`foundry.toml`](foundry.toml) for optional Foundry-based Solidity tests when Foundry is installed locally.
 
-### v0.8 Execution Target Registry
+## Configuration
 
-v0.8 adds an organization-scoped execution target/selector registry so proposal execution is no longer hardcoded to the local `DemoTarget`. Proposal execution authority is derived from IsoniaOS governance contracts and configured execution permissions.
+Hardhat configuration lives in [`hardhat.config.ts`](hardhat.config.ts).
 
-Proposals now carry a compact protocol-level action identity: `target`, `value`, `actionSelector`, and `dataHash`. The selector is not ABI decoding and does not make arbitrary target-contract events governance authority. It lets IsoniaOS explain which registered selector a proposal intends to execute before full calldata is supplied.
+Current networks and variables:
 
-`GovProposals` requires:
+- `hardhatMainnet`: local EDR L1 simulation used by the local node script.
+- `hardhatOp`: local EDR OP simulation.
+- `localhost`: HTTP JSON-RPC at `http://127.0.0.1:8545`.
+- `sepolia`: requires `SEPOLIA_RPC_URL` and `SEPOLIA_PRIVATE_KEY` through Hardhat configuration variables.
 
-- the proposal target to be explicitly enabled for the organization;
-- the proposal action selector to be explicitly enabled for that organization and target;
-- execution calldata to have the same selector declared by the proposal;
-- the proposal value and execution `msg.value` to stay within the target rule's `maxValue`;
-- normal function-call execution calldata to contain at least a 4-byte selector.
+Local node script variables:
 
-Execution still enforces proposal status, approvals, vetoes, timelocks, executor role, exact full-calldata `dataHash`, and exact `msg.value`. Full calldata remains supplied at execution time and must hash to the proposal's stored `dataHash`. Registry updates emit `ExecutionTargetRuleUpdated` and `ExecutionSelectorRuleUpdated`, while `ProposalCreated` includes `actionSelector`, so downstream indexers can observe proposal intent and governance execution permissions without decoding arbitrary target-contract events.
+- `HARDHAT_NODE_NETWORK`: defaults to `hardhatMainnet`.
+- `HARDHAT_NODE_HOST`: defaults to `127.0.0.1`.
+- `HARDHAT_NODE_PORT`: defaults to `8545`.
+- `HARDHAT_VERBOSE_LOGS=true`: preserves verbose Hardhat request logging.
 
-Target contract behavior and events are execution evidence only. They are not universal governance authority and do not prove that external work, manual evidence, or offchain integrations are complete.
+Local seed explicit-address mode uses all of these together:
 
-### v0.8 Optional Managed Org Executor
+- `GOV_CORE_ADDRESS`
+- `GOV_PROPOSALS_ADDRESS`
+- `DEMO_TARGET_ADDRESS`
 
-v0.8 also includes an optional alpha managed execution path for client contracts that need to hand ownership or roles to an organization-scoped caller. `GovProposals` can store one setup-time executor address per organization through `setOrgExecutor(orgId, executor)` and exposes it through `getOrgExecutor(orgId)`.
+`DEMO_VOTES_TOKEN_ADDRESS` is optional for explicit-address seed runs.
 
-Proposals still describe the final client target call, not an executor wrapper call. The protocol-level action identity remains `target`, `value`, `actionSelector`, and `dataHash`, where `target` is the final client contract, `value` is the native value intended for that final target, `actionSelector` is the final target selector, and `dataHash` is `keccak256(final target calldata)`.
+## Run / Usage
 
-When no org executor is configured, `GovProposals` keeps the existing direct final-target call path for local and backwards compatibility. When an org executor is configured, `GovProposals` still validates the proposal route, final target permission, final selector permission, value limit, selector match, data hash, and exact `msg.value` before forwarding the final target call to `IsoOrgExecutor`.
+Run contract tests:
 
-`ProposalExecuted` is the canonical protocol execution receipt. It records the IsoniaOS executor role holder that called `executeProposal`, the final client `target`, final native `value`, final `actionSelector`, final calldata `dataHash`, and the `managedExecutor` used for the call. `managedExecutor` is `address(0)` for direct execution and the configured org executor address for managed execution.
-
-`IsoOrgExecutor` also emits `ManagedCallExecuted` after a successful managed call. That event is executor-local supporting evidence for the org-scoped authority bridge; it is not required for core protocol indexing when `ProposalExecuted` is available from `GovProposals`.
-
-`IsoOrgExecutor` is scoped to one immutable `orgId` and one immutable `GovProposals` address. It has no company/global operator path, does not use `delegatecall`, and does not decode arbitrary customer ABIs beyond selector, value, and data-hash verification. It is a scoped caller and authority bridge for client-contract handoff, not a global Isonia superadmin.
-
-Free-form function names, human-readable signatures, and strings are metadata only and are not enforcement authority. Target-contract events remain evidence unless a future protocol change explicitly models them as authority.
-
-This alpha baseline does not include parameter constraints, an executor factory, proxy patterns, AccessControl or AccessManager adapters, Safe modules, Snapshot/Tally/Agora integrations, ABI upload/decoding, or a central event hub.
-
-### v0.8 Local/Lab Demo Target
-
-`DemoTarget` remains available as a local/lab target that must be explicitly enabled for demo organizations. It is not built-in governance authority, not a production treasury, and not an external integration authority.
-
-The v0.8 demo target preserves the existing `setNumber(uint64 orgId, uint256 newNumber)` path and adds governed actions for local accountability scenarios:
-
-- `setFeatureEnabled(uint64 orgId, bytes32 feature, bool enabled)`
-- `setUintParam(uint64 orgId, bytes32 key, uint256 value)`
-- `releaseNativePayment(uint64 orgId, bytes32 obligationId, address payable recipient)`
-- `markObligationAccepted(uint64 orgId, bytes32 obligationId)`
-- `markObligationCancelled(uint64 orgId, bytes32 obligationId, string reason)`
-
-These methods emit deterministic local/lab events that downstream read models can later map into proposal history, execution state, obligation references, linked transaction hashes, and public proof-of-execution displays. The local seed script explicitly enables the `DemoTarget` address and selectors for seeded demo organizations before creating executable demo proposals.
-
-### Demo Votes Token
-
-`IsoDemoVotesToken` is a demo-only ERC20Votes-style token deployed by the local Ignition module for future local DAO-process simulation. It supports owner-only demo minting, delegation, current votes, and historical votes.
-
-This token is not the ISO launch token and does not implement bonding curves, fees, transfer taxes, reserves, identity checks, whale premiums, governance activation, or production voting eligibility.
-
-### Bootstrap Finalization and Admin Handoff
-
-The v0.7 alpha protocol includes explicit bootstrap finalization. The organization admin can complete setup, review the activated structure, and call `finalizeOrganization(orgId)` to end bootstrap authority for governance-critical configuration.
-
-Finalization is irreversible in this alpha and emits `OrganizationFinalized`. `isOrganizationFinalized(orgId)` exposes the on-chain finalization state while existing read paths remain available.
-
-After finalization, bootstrap admin mutation functions are blocked for bodies, roles, mandates, policy rules, typed batch activation, execution target/selector registry updates, org executor configuration, and the existing admin-only configuration/update paths. Future emergency/recovery and governance-controlled post-finalization configuration changes remain open design areas and are not implemented here.
-
-### Admin Batch Activation
-
-The v0.7 alpha protocol also includes typed admin batch functions for bootstrap setup groups:
-
-- `batchCreateBodies`
-- `batchCreateRoles`
-- `batchAssignMandates`
-- `batchSetPolicyRules`
-
-Batches preserve `msg.sender` as the organization admin, avoid arbitrary calldata multicall, and emit the same granular events as the equivalent serial setup calls so Control Plane read models remain deterministically recoverable from contract events. Serial activation remains supported as the compatibility fallback.
-
-Batch activation reduces setup friction, while bootstrap finalization prevents bootstrap authority from becoming permanent admin control after governance activation. App Core should prefer a contract batch path when available, keep serial activation as fallback, and treat EIP-5792 as an optional wallet-level optimization because support is wallet, account, and chain dependent.
-
-These alpha contracts are not production audited and should not be described as production-ready governance infrastructure.
-
-## Local Developer Preview Deployment
+```bash
+corepack pnpm test
+```
 
 Start a local Hardhat node:
 
-```txt
+```bash
 corepack pnpm node:local
 ```
 
-The `node:local` script starts the Hardhat 3 local node with the configured
-`hardhatMainnet` simulated network. Hardhat's node task enables request logging
-for the JSON-RPC server, so normal mode turns that request logging back off
-after startup. Wallet/provider simulation reverts do not dominate demo output.
-Set `HARDHAT_VERBOSE_LOGS=true` before starting the node to preserve verbose
-Hardhat request logs while debugging RPC or EVM failures. This setting changes
-only local node console logging; it does not change contract behavior or relax
-transaction/call failure semantics.
+Deploy the local Ignition module to the running local node:
 
-Deploy local demo contracts with Ignition:
-
-```txt
+```bash
 corepack pnpm deploy:local
 ```
 
-The local demo module deploys `GovCore`, `GovProposals`, `DemoTarget`, and `IsoDemoVotesToken`. `DemoTarget` execution is not hardcoded in `GovProposals`; `seed:local` configures it as an explicit local/lab execution target for the seeded organizations.
+Seed local organizations and demo/lab actions against the deployed contracts:
 
-A protocol-only Ignition module is also available at `ignition/modules/IsoniaProtocol.ts` for future deployment paths that need only `GovCore` and `GovProposals`.
-
-Seed the Simple DAO+ and Bicameral preview topologies:
-
-```txt
+```bash
 corepack pnpm seed:local
 ```
 
-`seed:local` reads the current chain's Ignition deployment file, such as `ignition/deployments/chain-31337/deployed_addresses.json`, and seeds those existing contracts. The `contracts` addresses printed by `seed:local` must match the Ignition deployed addresses.
+Optional Foundry validation, when Foundry is installed:
 
-The local v0.8 seed also creates one approved-and-executed accountability demo action and one approved-but-not-executed obligation action. If the Ignition deployment includes `IsoDemoVotesToken`, `seed:local` mints demo votes to deterministic sample actors and self-delegates them for local simulation.
-
-Future Sepolia lab deployments should be represented by deployment manifests that record explicit chain IDs, protocol addresses, deployment capabilities, and configured execution target/selector permissions. Runtime behavior must not be inferred from package version strings.
-
-Optional explicit address mode is available when seeding a known contract set directly.
-
-PowerShell:
-
-```txt
-$env:GOV_CORE_ADDRESS = "0x..."
-$env:GOV_PROPOSALS_ADDRESS = "0x..."
-$env:DEMO_TARGET_ADDRESS = "0x..."
-corepack pnpm seed:local
+```bash
+forge test
 ```
 
-cmd.exe:
+## Troubleshooting
 
-```txt
-set GOV_CORE_ADDRESS=0x...
-set GOV_PROPOSALS_ADDRESS=0x...
-set DEMO_TARGET_ADDRESS=0x...
-corepack pnpm seed:local
-```
+- If `seed:local` cannot find deployment addresses, run `corepack pnpm deploy:local` first or set `GOV_CORE_ADDRESS`, `GOV_PROPOSALS_ADDRESS`, and `DEMO_TARGET_ADDRESS` together.
+- If browser wallet transactions fail on the local chain, confirm the wallet is connected to chain `31337` and has local ETH.
+- If Hardhat node output is too noisy, leave `HARDHAT_VERBOSE_LOGS` unset. Set it to `true` only while debugging RPC/EVM behavior.
+- If Sepolia commands fail before execution, confirm Hardhat can resolve `SEPOLIA_RPC_URL` and `SEPOLIA_PRIVATE_KEY`.
 
-All three explicit address variables must be set together. If no explicit addresses are set and no Ignition deployment file exists for the current chain, run `corepack pnpm deploy:local` first.
+## Contribution
 
-`DEMO_VOTES_TOKEN_ADDRESS` may also be provided when explicit address mode is used, but it is optional and does not replace the required protocol addresses.
+Read [`AGENTS.md`](AGENTS.md) before editing. Contract behavior changes must preserve explicit authority boundaries, `orgId` isolation, policy/version semantics, and replayable event surfaces. Keep demo contracts, mocks, fixtures, and provider experiments isolated from protocol core.
 
-Set balance in your browser wallet:
+Update the smallest relevant local docs and the public docs repository when a change affects user, developer, operator, configuration, or public-claim behavior.
 
-```txt
-npx hardhat console
-> await fetch("http://127.0.0.1:8545", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    jsonrpc: "2.0",
-    method: "hardhat_setBalance",
-    params: ["your_wallet_address", "0x56BC75E2D63100000"],
-    id: 1
-  })
-});
-```
+## License
+
+MIT. See [`LICENSE`](LICENSE).
