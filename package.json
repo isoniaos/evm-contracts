@@ -6,8 +6,9 @@
   "scripts": {
     "node:local": "node scripts/start-local-node.mjs",
     "test": "hardhat test",
-    "deploy:local": "hardhat ignition deploy ignition/modules/IsoniaProtocolV01.ts --network localhost",
-    "seed:local": "hardhat run scripts/seed-local.ts --network localhost"
+    "deploy:core:local": "hardhat ignition deploy ignition/modules/IsoniaProtocolCore.ts --network localhost",
+    "deploy:demo:local": "hardhat ignition deploy ignition/modules/IsoniaDemoLocal.ts --network localhost",
+    "seed:demo:local": "hardhat run scripts/seed-demo-local.ts --network localhost"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.6.1"

@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GovCore} from "../GovCore.sol";
 import {GovProposals} from "../GovProposals.sol";
-import {DemoTarget} from "../DemoTarget.sol";
+import {DemoTarget} from "../demo/DemoTarget.sol";
 import {IsoOrgExecutor} from "../execution/IsoOrgExecutor.sol";
 import {GovTypes} from "../GovTypes.sol";
 import {BodyDoesNotBelongToOrg, DataHashMismatch, InvalidProposalStatus} from "../GovErrors.sol";

@@ -7,7 +7,7 @@ This repository contains the contracts that model IsoniaOS onchain governance st
 - `GovCore` owns organizations, bodies, roles, mandates, policy rules, bootstrap setup, batch activation, and organization finalization.
 - `GovProposals` owns proposal lifecycle, route checks, approvals, vetoes, timelocks, execution permission checks, and canonical execution receipts.
 - `GovTypes` and `GovErrors` hold shared protocol types and errors.
-- `execution/IsoOrgExecutor.sol` is an optional organization-scoped caller for managed execution handoff.
+- `execution/IsoOrgExecutor.sol` is an optional protocol helper for organization-scoped managed execution handoff.
 - Interfaces under `contracts/interfaces/` define narrow cross-contract boundaries.
 
 ## Execution Identity
@@ -29,9 +29,15 @@ When an organization has an `IsoOrgExecutor` configured, `GovProposals` still va
 
 ## Local and Lab Contracts
 
-`DemoTarget` and `demo/IsoDemoVotesToken.sol` are local/lab helpers. They are not production treasury infrastructure, ISO token mechanics, provider integration proof, or general governance authority.
+`demo/DemoTarget.sol` and `demo/IsoDemoVotesToken.sol` are local/demo helpers. They are not production treasury infrastructure, ISO token mechanics, provider integration proof, or general governance authority.
 
-Target-contract events from local/lab contracts can support deterministic proof and UI testing, but they do not prove that external work was completed.
+Target-contract events from local/demo contracts can support deterministic proof and UI testing, but they do not prove that external work was completed.
+
+## Deployment Boundary
+
+`ignition/modules/IsoniaProtocolCore.ts` deploys only the base protocol core (`GovCore` and `GovProposals`). `ignition/modules/IsoniaDemoLocal.ts` composes the demo target and demo votes token on top of the core contracts for local workflows.
+
+Generated Ignition deployment state under `ignition/deployments/` is local output and should not be treated as source or committed as an active protocol artifact.
 
 ## Finalization and Batch Activation
 

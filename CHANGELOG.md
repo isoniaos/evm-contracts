@@ -6,6 +6,13 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Moved `DemoTarget` under `contracts/demo/` and kept demo helper contracts out of protocol-core paths.
+- Split local deployment commands into `deploy:core:local` for protocol core and `deploy:demo:local` plus `seed:demo:local` for local demo workflows.
+- Replaced active version-named deploy, seed, and test file names with current descriptive names.
+- Removed checked-in local Ignition deployment output and ignored generated `ignition/deployments/` state.
+
 ## [0.8.0-alpha.5]
 
 ### Changed
@@ -160,7 +167,8 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 - Organization, body, role, mandate, policy rule, and proposal lifecycle support.
 - Demo target and local deployment/seed scripts for v0.1 validation.
 
-[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.4...HEAD
+[Unreleased]: https://github.com/isoniaos/evm-contracts/compare/v0.8.0-alpha.5...HEAD
+[0.8.0-alpha.5]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.5
 [0.8.0-alpha.4]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.4
 [0.8.0-alpha.3]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.3
 [0.8.0-alpha.2]: https://github.com/isoniaos/evm-contracts/releases/tag/v0.8.0-alpha.2

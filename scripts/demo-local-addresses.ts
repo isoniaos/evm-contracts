@@ -4,26 +4,26 @@ import { join } from "node:path";
 const ENV_ADDRESS_NAMES = ["GOV_CORE_ADDRESS", "GOV_PROPOSALS_ADDRESS", "DEMO_TARGET_ADDRESS"] as const;
 
 const IGNITION_ADDRESS_KEYS = {
-  govCore: "IsoniaProtocolV01Module#GovCore",
-  govProposals: "IsoniaProtocolV01Module#GovProposals",
-  demoTarget: "IsoniaProtocolV01Module#DemoTarget",
-  demoVotesToken: "IsoniaProtocolV01Module#IsoDemoVotesToken",
+  govCore: "IsoniaDemoLocalModule#GovCore",
+  govProposals: "IsoniaDemoLocalModule#GovProposals",
+  demoTarget: "IsoniaDemoLocalModule#DemoTarget",
+  demoVotesToken: "IsoniaDemoLocalModule#IsoDemoVotesToken",
 } as const;
 
-export interface SeedAddressEnv {
+export interface DemoLocalAddressEnv {
   readonly GOV_CORE_ADDRESS?: string;
   readonly GOV_PROPOSALS_ADDRESS?: string;
   readonly DEMO_TARGET_ADDRESS?: string;
   readonly DEMO_VOTES_TOKEN_ADDRESS?: string;
 }
 
-export interface ResolveSeedContractAddressesOptions {
+export interface ResolveDemoLocalContractAddressesOptions {
   readonly chainId: bigint | number | string;
-  readonly env?: SeedAddressEnv;
+  readonly env?: DemoLocalAddressEnv;
   readonly projectRoot?: string;
 }
 
-export interface SeedContractAddresses {
+export interface DemoLocalContractAddresses {
   readonly govCore: string;
   readonly govProposals: string;
   readonly demoTarget: string;
@@ -32,7 +32,7 @@ export interface SeedContractAddresses {
   readonly ignitionDeploymentFile?: string;
 }
 
-export function resolveSeedContractAddresses(options: ResolveSeedContractAddressesOptions): SeedContractAddresses {
+export function resolveDemoLocalContractAddresses(options: ResolveDemoLocalContractAddressesOptions): DemoLocalContractAddresses {
   const env = options.env ?? process.env;
   const envAddresses = {
     govCore: normalizeAddress(env.GOV_CORE_ADDRESS),
@@ -66,7 +66,7 @@ export function resolveSeedContractAddresses(options: ResolveSeedContractAddress
     ].filter((value): value is string => value !== undefined);
 
     throw new Error(
-      `Set all of ${formatEnvAddressNames()}, or leave all unset so seed:local can use the local Ignition deployment. Missing: ${missing.join(", ")}.`,
+      `Set all of ${formatEnvAddressNames()}, or leave all unset so seed:demo:local can use the demo-local Ignition deployment. Missing: ${missing.join(", ")}.`,
     );
   }
 
@@ -96,7 +96,7 @@ export function resolveSeedContractAddresses(options: ResolveSeedContractAddress
 
   if (missingKeys.length > 0) {
     throw new Error(
-      `Ignition deployment file ${deploymentFile} is missing ${missingKeys.join(", ")}. Run \`corepack pnpm deploy:local\` first, then run \`corepack pnpm seed:local\`.`,
+      `Ignition deployment file ${deploymentFile} is missing ${missingKeys.join(", ")}. Run \`corepack pnpm deploy:demo:local\` first, then run \`corepack pnpm seed:demo:local\`.`,
     );
   }
 
@@ -132,14 +132,14 @@ function readIgnitionDeploymentFile(deploymentFile: string): Record<string, unkn
     const message = error instanceof Error ? error.message : String(error);
 
     throw new Error(
-      `Could not read local Ignition deployment addresses from ${deploymentFile}: ${message}. Run \`corepack pnpm deploy:local\` first, then run \`corepack pnpm seed:local\`.`,
+      `Could not read local Ignition deployment addresses from ${deploymentFile}: ${message}. Run \`corepack pnpm deploy:demo:local\` first, then run \`corepack pnpm seed:demo:local\`.`,
     );
   }
 }
 
 function missingIgnitionDeploymentError(chainId: string, deploymentFile: string): Error {
   return new Error(
-    `No local Ignition deployment addresses found for chain ${chainId} at ${deploymentFile}. Run \`corepack pnpm deploy:local\` first, then run \`corepack pnpm seed:local\`, or set all of ${formatEnvAddressNames()}.`,
+    `No local Ignition deployment addresses found for chain ${chainId} at ${deploymentFile}. Run \`corepack pnpm deploy:demo:local\` first, then run \`corepack pnpm seed:demo:local\`, or set all of ${formatEnvAddressNames()}.`,
   );
 }
 

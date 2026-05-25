@@ -23,7 +23,7 @@ If this repository is cloned standalone, use this file as the local agent entry 
 
 - Solidity contracts under `contracts/`
 - Hardhat 3 with TypeScript config in `hardhat.config.ts`
-- Ignition local deployment module under `ignition/modules/`
+- Core and demo-local Ignition deployment modules under `ignition/modules/`
 - Optional Foundry configuration in `foundry.toml`
 
 Useful commands:
@@ -32,8 +32,9 @@ Useful commands:
 corepack pnpm install
 corepack pnpm test
 corepack pnpm node:local
-corepack pnpm deploy:local
-corepack pnpm seed:local
+corepack pnpm deploy:core:local
+corepack pnpm deploy:demo:local
+corepack pnpm seed:demo:local
 forge test
 git diff --check
 ```

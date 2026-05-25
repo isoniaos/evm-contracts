@@ -39,6 +39,8 @@ const PROPOSAL_STATUS = {
   executed: 6n,
 } as const;
 
+const DEMO_TARGET_CONTRACT = "contracts/demo/DemoTarget.sol:DemoTarget";
+
 const DEMO_TARGET_FUNCTIONS = [
   "setNumber(uint64,uint256)",
   "setFeatureEnabled(uint64,bytes32,bool)",
@@ -377,7 +379,7 @@ async function approveTreasury(context: ProtocolContext, proposalId: bigint): Pr
 async function deployProtocol(options: DeployProtocolOptions = {}): Promise<ProtocolContext> {
   const [deployer, orgAdminA, orgAdminB, proposer, councilApprover, treasuryApprover, vetoer, executor, outsider]: SignerWithAddress[] = await ethers.getSigners();
   const govCore: DeployedContract = await ethers.deployContract("GovCore") as unknown as DeployedContract;
-  const demoTarget: DeployedContract = await ethers.deployContract("DemoTarget", [deployer.address]) as unknown as DeployedContract;
+  const demoTarget: DeployedContract = await ethers.deployContract(DEMO_TARGET_CONTRACT, [deployer.address]) as unknown as DeployedContract;
   const govProposals: DeployedContract = await ethers.deployContract("GovProposals", [await govCore.getAddress()]) as unknown as DeployedContract;
   await invoke(demoTarget, "setGovProposals", [await govProposals.getAddress()]);
   const orgA: OrgContext = await createOrgContext(govCore, orgAdminA, "alpha");
@@ -396,7 +398,7 @@ async function increaseTime(seconds: bigint): Promise<void> {
   await ethers.provider.send("evm_mine", []);
 }
 
-describe("Protocol v0.1", function () {
+describe("Gov protocol core", function () {
   describe("typed admin batch activation", function () {
     it("creates bodies in a typed batch and emits the existing per-body events", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
@@ -804,7 +806,7 @@ describe("Protocol v0.1", function () {
     expect(proposalState.status).to.equal(PROPOSAL_STATUS.approved);
   });
 
-  describe("v0.8 managed org executor", function () {
+  describe("managed org executor", function () {
     it("configures an org-scoped executor during bootstrap and exposes it for reads", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
       const orgExecutor = await deployOrgExecutor(context.govProposals, context.orgA.orgId);
@@ -1019,7 +1021,7 @@ describe("Protocol v0.1", function () {
 
   it("blocks execution when the target is configured but the selector is not", async function (): Promise<void> {
     const context: ProtocolContext = await deployProtocol();
-    const standaloneTarget = await ethers.deployContract("DemoTarget", [context.orgAdminA.address]) as unknown as DeployedContract;
+    const standaloneTarget = await ethers.deployContract(DEMO_TARGET_CONTRACT, [context.orgAdminA.address]) as unknown as DeployedContract;
     const target = await standaloneTarget.getAddress();
     await invoke(standaloneTarget.connect(context.orgAdminA), "setGovProposals", [await context.govProposals.getAddress()]);
     await configureExecutionTarget(context.govProposals, context.orgAdminA, context.orgA.orgId, target);
@@ -1069,12 +1071,12 @@ describe("Protocol v0.1", function () {
       .withArgs(context.orgA.orgId, target, EXECUTION_TARGET_MAX_VALUE, value);
   });
 
-  describe("v0.8 accountability demo target", function () {
+  describe("accountability demo target", function () {
     it("rejects direct calls to governed target methods from non-GovProposals actors", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
-      const feature = ethers.id("feature:v0.8:archive");
-      const key = ethers.id("param:v0.8:max-review-days");
-      const obligationId = ethers.id("obligation:v0.8:direct-guard");
+      const feature = ethers.id("feature:archive");
+      const key = ethers.id("param:max-review-days");
+      const obligationId = ethers.id("obligation:direct-guard");
 
       await expect(invoke(context.demoTarget.connect(context.outsider), "setFeatureEnabled", [context.orgA.orgId, feature, true]))
         .to.be.revertedWithCustomError(context.demoTarget, "Unauthorized")
@@ -1096,7 +1098,7 @@ describe("Protocol v0.1", function () {
 
     it("executes a feature flag proposal and emits proof events", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
-      const feature = ethers.id("feature:v0.8:public-archive");
+      const feature = ethers.id("feature:public-archive");
       const action = createTargetAction(context.demoTarget, "setFeatureEnabled", [context.orgA.orgId, feature, true]);
       const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action);
       await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
@@ -1115,7 +1117,7 @@ describe("Protocol v0.1", function () {
 
     it("executes an obligation acceptance proposal and emits the obligation event", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
-      const obligationId = ethers.id("obligation:v0.8:accepted");
+      const obligationId = ethers.id("obligation:accepted");
       const action = createTargetAction(context.demoTarget, "markObligationAccepted", [context.orgA.orgId, obligationId]);
       const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action);
       await invoke(context.govProposals.connect(context.councilApprover), "approveProposal", [context.orgA.orgId, proposal.proposalId, context.orgA.bodies.councilBodyId]);
@@ -1132,7 +1134,7 @@ describe("Protocol v0.1", function () {
 
     it("releases native value through proposal execution and emits the payment event", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
-      const obligationId = ethers.id("obligation:v0.8:native-payment");
+      const obligationId = ethers.id("obligation:native-payment");
       const payment = ethers.parseEther("0.05");
       const action = createTargetAction(context.demoTarget, "releaseNativePayment", [context.orgA.orgId, obligationId, context.outsider.address]);
       const proposal = await createProposalForAction(context, PROPOSAL_TYPE.standard, await context.demoTarget.getAddress(), action, payment);
@@ -1151,8 +1153,8 @@ describe("Protocol v0.1", function () {
 
     it("rejects a zero recipient for native payment release", async function (): Promise<void> {
       const context: ProtocolContext = await deployProtocol();
-      const obligationId = ethers.id("obligation:v0.8:zero-recipient");
-      const standaloneTarget = await ethers.deployContract("DemoTarget", [context.orgAdminA.address]) as unknown as DeployedContract;
+      const obligationId = ethers.id("obligation:zero-recipient");
+      const standaloneTarget = await ethers.deployContract(DEMO_TARGET_CONTRACT, [context.orgAdminA.address]) as unknown as DeployedContract;
       await invoke(standaloneTarget.connect(context.orgAdminA), "setGovProposals", [context.executor.address]);
       const releaseNativePayment = standaloneTarget.connect(context.executor).getFunction("releaseNativePayment");
 

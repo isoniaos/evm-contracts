@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ZeroAddress, Unauthorized} from "./GovErrors.sol";
+import {ZeroAddress, Unauthorized} from "../GovErrors.sol";
 
 error NativePaymentTransferFailed(address recipient, uint256 amount);
 

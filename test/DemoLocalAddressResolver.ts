@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveSeedContractAddresses } from "../scripts/seed-local-addresses.js";
+import { resolveDemoLocalContractAddresses } from "../scripts/demo-local-addresses.js";
 
 const CHAIN_ID = 31337;
 const GOV_CORE_ADDRESS = "0x1111111111111111111111111111111111111111";
@@ -9,7 +9,7 @@ const GOV_PROPOSALS_ADDRESS = "0x2222222222222222222222222222222222222222";
 const DEMO_TARGET_ADDRESS = "0x3333333333333333333333333333333333333333";
 const DEMO_VOTES_TOKEN_ADDRESS = "0x4444444444444444444444444444444444444444";
 
-describe("seed-local address resolver", function () {
+describe("demo-local address resolver", function () {
   const temporaryRoots: string[] = [];
 
   afterEach(function () {
@@ -19,7 +19,7 @@ describe("seed-local address resolver", function () {
   });
 
   it("uses all three explicit env addresses", function () {
-    const addresses = resolveSeedContractAddresses({
+    const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {
         GOV_CORE_ADDRESS,
@@ -38,7 +38,7 @@ describe("seed-local address resolver", function () {
   });
 
   it("includes an optional demo votes token env address when provided", function () {
-    const addresses = resolveSeedContractAddresses({
+    const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {
         GOV_CORE_ADDRESS,
@@ -60,7 +60,7 @@ describe("seed-local address resolver", function () {
 
   it("rejects partial explicit env addresses", function () {
     const resolve = () =>
-      resolveSeedContractAddresses({
+      resolveDemoLocalContractAddresses({
         chainId: CHAIN_ID,
         env: {
           GOV_CORE_ADDRESS,
@@ -77,7 +77,7 @@ describe("seed-local address resolver", function () {
     const projectRoot = createTemporaryProjectRoot();
     const deploymentFile = writeIgnitionDeployment(projectRoot, CHAIN_ID);
 
-    const addresses = resolveSeedContractAddresses({
+    const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {},
       projectRoot,
@@ -96,7 +96,7 @@ describe("seed-local address resolver", function () {
     const projectRoot = createTemporaryProjectRoot();
     const deploymentFile = writeIgnitionDeployment(projectRoot, CHAIN_ID, true);
 
-    const addresses = resolveSeedContractAddresses({
+    const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {},
       projectRoot,
@@ -116,21 +116,38 @@ describe("seed-local address resolver", function () {
     const projectRoot = createTemporaryProjectRoot();
 
     const resolve = () =>
-      resolveSeedContractAddresses({
+      resolveDemoLocalContractAddresses({
         chainId: CHAIN_ID,
         env: {},
         projectRoot,
       });
 
-    expect(resolve).to.throw("Run `corepack pnpm deploy:local` first");
-    expect(resolve).to.throw("corepack pnpm seed:local");
+    expect(resolve).to.throw("Run `corepack pnpm deploy:demo:local` first");
+    expect(resolve).to.throw("corepack pnpm seed:demo:local");
+  });
+
+  it("rejects core-only Ignition deployments for demo seeding", function () {
+    const projectRoot = createTemporaryProjectRoot();
+    writeCoreIgnitionDeployment(projectRoot, CHAIN_ID);
+
+    const resolve = () =>
+      resolveDemoLocalContractAddresses({
+        chainId: CHAIN_ID,
+        env: {},
+        projectRoot,
+      });
+
+    expect(resolve).to.throw("IsoniaDemoLocalModule#GovCore");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#GovProposals");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#DemoTarget");
+    expect(resolve).to.throw("corepack pnpm deploy:demo:local");
   });
 
   it("does not expose a deploy-new-contracts fallback", function () {
     const projectRoot = createTemporaryProjectRoot();
     writeIgnitionDeployment(projectRoot, CHAIN_ID);
 
-    const addresses = resolveSeedContractAddresses({
+    const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {},
       projectRoot,
@@ -140,11 +157,31 @@ describe("seed-local address resolver", function () {
   });
 
   function createTemporaryProjectRoot(): string {
-    const temporaryRoot = mkdtempSync(join(process.cwd(), ".tmp-seed-local-resolver-"));
+    const temporaryRoot = mkdtempSync(join(process.cwd(), ".tmp-demo-local-address-resolver-"));
     temporaryRoots.push(temporaryRoot);
     return temporaryRoot;
   }
 });
+
+function writeCoreIgnitionDeployment(projectRoot: string, chainId: number): string {
+  const deploymentDirectory = join(projectRoot, "ignition", "deployments", `chain-${chainId}`);
+  const deploymentFile = join(deploymentDirectory, "deployed_addresses.json");
+
+  mkdirSync(deploymentDirectory, { recursive: true });
+  writeFileSync(
+    deploymentFile,
+    JSON.stringify(
+      {
+        "IsoniaProtocolCoreModule#GovCore": GOV_CORE_ADDRESS,
+        "IsoniaProtocolCoreModule#GovProposals": GOV_PROPOSALS_ADDRESS,
+      },
+      null,
+      2,
+    ),
+  );
+
+  return deploymentFile;
+}
 
 function writeIgnitionDeployment(projectRoot: string, chainId: number, includeDemoVotesToken = false): string {
   const deploymentDirectory = join(projectRoot, "ignition", "deployments", `chain-${chainId}`);
@@ -155,10 +192,10 @@ function writeIgnitionDeployment(projectRoot: string, chainId: number, includeDe
     deploymentFile,
     JSON.stringify(
       {
-        "IsoniaProtocolV01Module#DemoTarget": DEMO_TARGET_ADDRESS,
-        "IsoniaProtocolV01Module#GovCore": GOV_CORE_ADDRESS,
-        "IsoniaProtocolV01Module#GovProposals": GOV_PROPOSALS_ADDRESS,
-        ...(includeDemoVotesToken ? { "IsoniaProtocolV01Module#IsoDemoVotesToken": DEMO_VOTES_TOKEN_ADDRESS } : {}),
+        "IsoniaDemoLocalModule#DemoTarget": DEMO_TARGET_ADDRESS,
+        "IsoniaDemoLocalModule#GovCore": GOV_CORE_ADDRESS,
+        "IsoniaDemoLocalModule#GovProposals": GOV_PROPOSALS_ADDRESS,
+        ...(includeDemoVotesToken ? { "IsoniaDemoLocalModule#IsoDemoVotesToken": DEMO_VOTES_TOKEN_ADDRESS } : {}),
       },
       null,
       2,

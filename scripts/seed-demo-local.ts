@@ -1,5 +1,5 @@
 import { network } from "hardhat";
-import { resolveSeedContractAddresses } from "./seed-local-addresses.js";
+import { resolveDemoLocalContractAddresses } from "./demo-local-addresses.js";
 
 const { ethers } = await network.getOrCreate();
 
@@ -35,6 +35,8 @@ const DEMO_TARGET_FUNCTIONS = [
   "markObligationAccepted(uint64,bytes32)",
   "markObligationCancelled(uint64,bytes32,string)",
 ] as const;
+const DEMO_TARGET_CONTRACT = "contracts/demo/DemoTarget.sol:DemoTarget";
+const DEMO_VOTES_TOKEN_CONTRACT = "contracts/demo/IsoDemoVotesToken.sol:IsoDemoVotesToken";
 
 function mask(proposalType: bigint): bigint {
   return 1n << proposalType;
@@ -242,7 +244,7 @@ async function createTargetProposal(govProposals: any, demoTarget: any, proposer
 
 async function createExecutedFeatureProposal(context: any) {
   const { govProposals, demoTarget, proposer, approver, executor, orgId, approvalBodyId } = context;
-  const feature = ethers.id("feature:v0.8:public-governance-archive");
+  const feature = ethers.id("feature:public-governance-archive");
   const actionData = demoTarget.interface.encodeFunctionData("setFeatureEnabled", [orgId, feature, true]);
   const actionSelector = selectorFromActionData(actionData);
   const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
@@ -261,7 +263,7 @@ async function createExecutedFeatureProposal(context: any) {
 
 async function createApprovedPendingObligationProposal(context: any) {
   const { govProposals, demoTarget, proposer, approver, orgId, approvalBodyId } = context;
-  const obligationId = ethers.id("obligation:v0.8:pending-demo-follow-through");
+  const obligationId = ethers.id("obligation:pending-demo-follow-through");
   const actionData = demoTarget.interface.encodeFunctionData("markObligationAccepted", [orgId, obligationId]);
   const actionSelector = selectorFromActionData(actionData);
   const proposalId = await createTargetProposal(govProposals, demoTarget, proposer, orgId, PROPOSAL_TYPE.standard, actionData);
@@ -304,12 +306,12 @@ await main();
 
 async function resolveProtocolContracts() {
   const networkInfo = await ethers.provider.getNetwork();
-  const addresses = resolveSeedContractAddresses({ chainId: networkInfo.chainId });
+  const addresses = resolveDemoLocalContractAddresses({ chainId: networkInfo.chainId });
 
   return {
     govCore: await ethers.getContractAt("GovCore", addresses.govCore),
     govProposals: await ethers.getContractAt("GovProposals", addresses.govProposals),
-    demoTarget: await ethers.getContractAt("DemoTarget", addresses.demoTarget),
-    demoVotesToken: addresses.demoVotesToken === undefined ? undefined : await ethers.getContractAt("IsoDemoVotesToken", addresses.demoVotesToken),
+    demoTarget: await ethers.getContractAt(DEMO_TARGET_CONTRACT, addresses.demoTarget),
+    demoVotesToken: addresses.demoVotesToken === undefined ? undefined : await ethers.getContractAt(DEMO_VOTES_TOKEN_CONTRACT, addresses.demoVotesToken),
   };
 }
