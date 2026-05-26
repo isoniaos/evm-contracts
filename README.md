@@ -2,7 +2,7 @@
 
 This repository owns the EVM smart contracts for modeled IsoniaOS governance authority. It contains the Solidity protocol contracts, local deployment scripts, seed tooling, and tests used by downstream Control Plane, SDK, and App Core work.
 
-The public developer overview is in the public docs repository at [site/developers/index.md](https://github.com/isoniaos/docs/blob/main/site/developers/index.md). Local authority boundaries and contract surface notes are maintained in [`docs/protocol-boundaries.md`](docs/protocol-boundaries.md).
+The public developer overview is in the public docs repository at [site/developers/index.md](https://github.com/isoniaos/docs/blob/main/site/developers/index.md). Local authority boundaries and contract surface notes are maintained in [`docs/protocol-boundaries.md`](docs/protocol-boundaries.md), with demo target compatibility examples in [`docs/target-access-patterns.md`](docs/target-access-patterns.md).
 
 ## Installation
 
@@ -34,9 +34,13 @@ Local node script variables:
 
 Demo-local seed explicit-address mode uses all of these together:
 
-- `GOV_CORE_ADDRESS`
-- `GOV_PROPOSALS_ADDRESS`
+- `ISONIA_CORE_ADDRESS`
+- `ISONIA_PROPOSALS_ADDRESS`
 - `DEMO_TARGET_ADDRESS`
+- `DEMO_OWNABLE_TARGET_ADDRESS`
+- `DEMO_ACCESS_CONTROL_TARGET_ADDRESS`
+- `DEMO_ACCESS_MANAGER_ADDRESS`
+- `DEMO_ACCESS_MANAGED_TARGET_ADDRESS`
 
 `DEMO_VOTES_TOKEN_ADDRESS` is optional for explicit-address demo seed runs.
 
@@ -60,13 +64,13 @@ Deploy only the protocol core contracts to the running local node:
 corepack pnpm deploy:core:local
 ```
 
-Deploy protocol core plus demo/local helper contracts to the running local node:
+Deploy protocol core plus demo/local helper contracts to the running local node. The demo-local module includes `DemoTarget`, `IsoDemoVotesToken`, and OpenZeppelin Ownable, AccessControl, and AccessManager target examples under `contracts/demo/`:
 
 ```bash
 corepack pnpm deploy:demo:local
 ```
 
-Seed local organizations and demo actions against the demo-local deployment:
+Seed local organizations and demo actions against the demo-local deployment. The seed creates standard demo organizations plus Ownable, AccessControl, and AccessManager target-pattern organizations:
 
 ```bash
 corepack pnpm seed:demo:local
@@ -80,7 +84,7 @@ forge test
 
 ## Troubleshooting
 
-- If `seed:demo:local` cannot find deployment addresses, run `corepack pnpm deploy:demo:local` first or set `GOV_CORE_ADDRESS`, `GOV_PROPOSALS_ADDRESS`, and `DEMO_TARGET_ADDRESS` together.
+- If `seed:demo:local` cannot find deployment addresses, run `corepack pnpm deploy:demo:local` first or set the full explicit-address group listed under Configuration.
 - If browser wallet transactions fail on the local chain, confirm the wallet is connected to chain `31337` and has local ETH.
 - If Hardhat node output is too noisy, leave `HARDHAT_VERBOSE_LOGS` unset. Set it to `true` only while debugging RPC/EVM behavior.
 - If Sepolia commands fail before execution, confirm Hardhat can resolve `SEPOLIA_RPC_URL` and `SEPOLIA_PRIVATE_KEY`.

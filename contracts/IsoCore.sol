@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {GovTypes} from "./GovTypes.sol";
-import {IGovCore} from "./interfaces/IGovCore.sol";
+import {IsoTypes} from "./IsoTypes.sol";
+import {IIsoCore} from "./interfaces/IIsoCore.sol";
 import {
     ZeroAddress,
     EmptySlug,
@@ -24,34 +24,34 @@ import {
     InvalidRoleType,
     InvalidExecutorBody,
     EmptyBatch
-} from "./GovErrors.sol";
+} from "./IsoErrors.sol";
 
-contract GovCore is IGovCore {
+contract IsoCore is IIsoCore {
     uint64 public nextOrgId = 1;
     uint64 public nextBodyId = 1;
     uint64 public nextRoleId = 1;
     uint64 public nextMandateId = 1;
 
-    mapping(uint64 => GovTypes.Organization) public organizations;
+    mapping(uint64 => IsoTypes.Organization) public organizations;
     mapping(uint64 => bool) private organizationFinalized;
     mapping(bytes32 => bool) public slugExists;
-    mapping(uint64 => GovTypes.Body) public bodies;
-    mapping(uint64 => GovTypes.Role) public roles;
-    mapping(uint64 => GovTypes.Mandate) public mandates;
-    mapping(uint64 => mapping(GovTypes.ProposalType => GovTypes.PolicyRule)) private policyRules;
-    mapping(uint64 => mapping(GovTypes.ProposalType => mapping(uint64 => GovTypes.PolicyRule))) private policyRuleVersions;
-    mapping(uint64 => mapping(GovTypes.ProposalType => uint64)) public policyVersion;
+    mapping(uint64 => IsoTypes.Body) public bodies;
+    mapping(uint64 => IsoTypes.Role) public roles;
+    mapping(uint64 => IsoTypes.Mandate) public mandates;
+    mapping(uint64 => mapping(IsoTypes.ProposalType => IsoTypes.PolicyRule)) private policyRules;
+    mapping(uint64 => mapping(IsoTypes.ProposalType => mapping(uint64 => IsoTypes.PolicyRule))) private policyRuleVersions;
+    mapping(uint64 => mapping(IsoTypes.ProposalType => uint64)) public policyVersion;
     mapping(uint64 => uint64[]) private orgBodies;
     mapping(uint64 => uint64[]) private bodyRoles;
     mapping(address => mapping(uint64 => uint64[])) private holderOrgMandates;
 
     event OrganizationCreated(uint64 indexed orgId, string slug, address indexed admin, string metadataURI);
     event OrganizationUpdated(uint64 indexed orgId, string metadataURI);
-    event OrganizationStatusChanged(uint64 indexed orgId, GovTypes.OrganizationStatus status);
+    event OrganizationStatusChanged(uint64 indexed orgId, IsoTypes.OrganizationStatus status);
     event OrganizationFinalized(uint64 indexed orgId, address indexed admin);
-    event BodyCreated(uint64 indexed orgId, uint64 indexed bodyId, GovTypes.BodyKind kind, string metadataURI);
+    event BodyCreated(uint64 indexed orgId, uint64 indexed bodyId, IsoTypes.BodyKind kind, string metadataURI);
     event BodyUpdated(uint64 indexed orgId, uint64 indexed bodyId, bool active, string metadataURI);
-    event RoleCreated(uint64 indexed orgId, uint64 indexed roleId, uint64 indexed bodyId, GovTypes.RoleType roleType, string metadataURI);
+    event RoleCreated(uint64 indexed orgId, uint64 indexed roleId, uint64 indexed bodyId, IsoTypes.RoleType roleType, string metadataURI);
     event RoleUpdated(uint64 indexed orgId, uint64 indexed roleId, bool active, string metadataURI);
     event MandateAssigned(
         uint64 indexed orgId,
@@ -67,7 +67,7 @@ contract GovCore is IGovCore {
     event MandateRevoked(uint64 indexed orgId, uint64 indexed mandateId, address indexed holder);
     event PolicyRuleSet(
         uint64 indexed orgId,
-        GovTypes.ProposalType indexed proposalType,
+        IsoTypes.ProposalType indexed proposalType,
         uint64 version,
         uint64[] requiredApprovalBodies,
         uint64[] vetoBodies,
@@ -91,8 +91,8 @@ contract GovCore is IGovCore {
         _;
     }
 
-    function proposalTypeBit(GovTypes.ProposalType proposalType) public pure returns (uint256 bit) {
-        if (proposalType == GovTypes.ProposalType.Unknown) {
+    function proposalTypeBit(IsoTypes.ProposalType proposalType) public pure returns (uint256 bit) {
+        if (proposalType == IsoTypes.ProposalType.Unknown) {
             revert InvalidProposalType();
         }
         bit = uint256(1) << uint8(proposalType);
@@ -111,10 +111,10 @@ contract GovCore is IGovCore {
         }
         orgId = nextOrgId;
         nextOrgId = orgId + 1;
-        organizations[orgId] = GovTypes.Organization({
+        organizations[orgId] = IsoTypes.Organization({
             id: orgId,
             admin: admin,
-            status: GovTypes.OrganizationStatus.Active,
+            status: IsoTypes.OrganizationStatus.Active,
             createdAt: _currentTimestamp(),
             slug: slug,
             metadataURI: metadataURI
@@ -133,8 +133,8 @@ contract GovCore is IGovCore {
         emit OrganizationFinalized(orgId, msg.sender);
     }
 
-    function setOrganizationStatus(uint64 orgId, GovTypes.OrganizationStatus status) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
-        GovTypes.Organization storage organization = organizations[orgId];
+    function setOrganizationStatus(uint64 orgId, IsoTypes.OrganizationStatus status) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
+        IsoTypes.Organization storage organization = organizations[orgId];
         _validateStatusTransition(organization.status, status);
         organization.status = status;
         emit OrganizationStatusChanged(orgId, status);
@@ -142,7 +142,7 @@ contract GovCore is IGovCore {
 
     function createBody(
         uint64 orgId,
-        GovTypes.BodyKind kind,
+        IsoTypes.BodyKind kind,
         string calldata metadataURI
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64 bodyId) {
         bodyId = _createBody(orgId, kind, metadataURI);
@@ -150,7 +150,7 @@ contract GovCore is IGovCore {
 
     function batchCreateBodies(
         uint64 orgId,
-        GovTypes.BodyCreateInput[] calldata inputs
+        IsoTypes.BodyCreateInput[] calldata inputs
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory bodyIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
@@ -160,13 +160,13 @@ contract GovCore is IGovCore {
         }
     }
 
-    function _createBody(uint64 orgId, GovTypes.BodyKind kind, string calldata metadataURI) internal returns (uint64 bodyId) {
-        if (kind == GovTypes.BodyKind.Unknown) {
+    function _createBody(uint64 orgId, IsoTypes.BodyKind kind, string calldata metadataURI) internal returns (uint64 bodyId) {
+        if (kind == IsoTypes.BodyKind.Unknown) {
             revert InvalidBodyKind();
         }
         bodyId = nextBodyId;
         nextBodyId = bodyId + 1;
-        bodies[bodyId] = GovTypes.Body({
+        bodies[bodyId] = IsoTypes.Body({
             id: bodyId,
             orgId: orgId,
             kind: kind,
@@ -179,7 +179,7 @@ contract GovCore is IGovCore {
     }
 
     function updateBody(uint64 orgId, uint64 bodyId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
-        GovTypes.Body storage body = _requireBodyInOrg(orgId, bodyId);
+        IsoTypes.Body storage body = _requireBodyInOrg(orgId, bodyId);
         body.active = active;
         body.metadataURI = metadataURI;
         emit BodyUpdated(orgId, bodyId, active, metadataURI);
@@ -188,7 +188,7 @@ contract GovCore is IGovCore {
     function createRole(
         uint64 orgId,
         uint64 bodyId,
-        GovTypes.RoleType roleType,
+        IsoTypes.RoleType roleType,
         string calldata metadataURI
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64 roleId) {
         roleId = _createRole(orgId, bodyId, roleType, metadataURI);
@@ -196,7 +196,7 @@ contract GovCore is IGovCore {
 
     function batchCreateRoles(
         uint64 orgId,
-        GovTypes.RoleCreateInput[] calldata inputs
+        IsoTypes.RoleCreateInput[] calldata inputs
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory roleIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
@@ -209,16 +209,16 @@ contract GovCore is IGovCore {
     function _createRole(
         uint64 orgId,
         uint64 bodyId,
-        GovTypes.RoleType roleType,
+        IsoTypes.RoleType roleType,
         string calldata metadataURI
     ) internal returns (uint64 roleId) {
         _requireBodyInOrg(orgId, bodyId);
-        if (roleType == GovTypes.RoleType.Unknown) {
+        if (roleType == IsoTypes.RoleType.Unknown) {
             revert InvalidRoleType();
         }
         roleId = nextRoleId;
         nextRoleId = roleId + 1;
-        roles[roleId] = GovTypes.Role({
+        roles[roleId] = IsoTypes.Role({
             id: roleId,
             orgId: orgId,
             bodyId: bodyId,
@@ -231,7 +231,7 @@ contract GovCore is IGovCore {
     }
 
     function updateRole(uint64 orgId, uint64 roleId, bool active, string calldata metadataURI) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
-        GovTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
+        IsoTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
         role.active = active;
         role.metadataURI = metadataURI;
         emit RoleUpdated(orgId, roleId, active, metadataURI);
@@ -251,7 +251,7 @@ contract GovCore is IGovCore {
 
     function batchAssignMandates(
         uint64 orgId,
-        GovTypes.MandateAssignInput[] calldata inputs
+        IsoTypes.MandateAssignInput[] calldata inputs
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) returns (uint64[] memory mandateIds) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
@@ -278,8 +278,8 @@ contract GovCore is IGovCore {
         uint256 proposalTypeMask,
         uint128 spendingLimit
     ) internal returns (uint64 mandateId) {
-        GovTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
-        GovTypes.Body storage body = _requireBodyInOrg(orgId, role.bodyId);
+        IsoTypes.Role storage role = _requireRoleInOrg(orgId, roleId);
+        IsoTypes.Body storage body = _requireBodyInOrg(orgId, role.bodyId);
         if (holder == address(0)) {
             revert ZeroAddress();
         }
@@ -288,7 +288,7 @@ contract GovCore is IGovCore {
         }
         mandateId = nextMandateId;
         nextMandateId = mandateId + 1;
-        mandates[mandateId] = GovTypes.Mandate({
+        mandates[mandateId] = IsoTypes.Mandate({
             id: mandateId,
             orgId: orgId,
             bodyId: body.id,
@@ -306,7 +306,7 @@ contract GovCore is IGovCore {
     }
 
     function revokeMandate(uint64 orgId, uint64 mandateId) external onlyOrgAdmin(orgId) onlyNotFinalized(orgId) {
-        GovTypes.Mandate storage mandate = _requireMandateInOrg(orgId, mandateId);
+        IsoTypes.Mandate storage mandate = _requireMandateInOrg(orgId, mandateId);
         if (mandate.revoked) {
             revert Unauthorized(msg.sender);
         }
@@ -317,7 +317,7 @@ contract GovCore is IGovCore {
 
     function setPolicyRule(
         uint64 orgId,
-        GovTypes.ProposalType proposalType,
+        IsoTypes.ProposalType proposalType,
         uint64[] calldata requiredApprovalBodies,
         uint64[] calldata vetoBodies,
         uint64 executorBody,
@@ -329,7 +329,7 @@ contract GovCore is IGovCore {
 
     function batchSetPolicyRules(
         uint64 orgId,
-        GovTypes.PolicyRuleSetInput[] calldata inputs
+        IsoTypes.PolicyRuleSetInput[] calldata inputs
     ) external onlyActiveOrgAdmin(orgId) onlyNotFinalized(orgId) {
         uint256 inputCount = inputs.length;
         _requireNonEmptyBatch(inputCount);
@@ -348,14 +348,14 @@ contract GovCore is IGovCore {
 
     function _setPolicyRule(
         uint64 orgId,
-        GovTypes.ProposalType proposalType,
+        IsoTypes.ProposalType proposalType,
         uint64[] calldata requiredApprovalBodies,
         uint64[] calldata vetoBodies,
         uint64 executorBody,
         uint64 timelockSeconds,
         bool enabled
     ) internal {
-        if (proposalType == GovTypes.ProposalType.Unknown) {
+        if (proposalType == IsoTypes.ProposalType.Unknown) {
             revert InvalidProposalType();
         }
         _validateBodies(orgId, requiredApprovalBodies);
@@ -373,21 +373,21 @@ contract GovCore is IGovCore {
         emit PolicyRuleSet(orgId, proposalType, nextVersion, requiredApprovalBodies, vetoBodies, executorBody, timelockSeconds, enabled);
     }
 
-    function getPolicyRule(uint64 orgId, GovTypes.ProposalType proposalType) external view returns (GovTypes.PolicyRule memory rule) {
+    function getPolicyRule(uint64 orgId, IsoTypes.ProposalType proposalType) external view returns (IsoTypes.PolicyRule memory rule) {
         rule = _copyPolicyRule(policyRules[orgId][proposalType]);
     }
 
     function getPolicyRuleAtVersion(
         uint64 orgId,
-        GovTypes.ProposalType proposalType,
+        IsoTypes.ProposalType proposalType,
         uint64 version
-    ) external view returns (GovTypes.PolicyRule memory rule) {
+    ) external view returns (IsoTypes.PolicyRule memory rule) {
         rule = _copyPolicyRule(policyRuleVersions[orgId][proposalType][version]);
     }
 
     function isOrganizationActive(uint64 orgId) public view returns (bool isActive) {
-        GovTypes.Organization storage organization = organizations[orgId];
-        isActive = organization.id != 0 && organization.status == GovTypes.OrganizationStatus.Active;
+        IsoTypes.Organization storage organization = organizations[orgId];
+        isActive = organization.id != 0 && organization.status == IsoTypes.OrganizationStatus.Active;
     }
 
     function isOrganizationFinalized(uint64 orgId) public view returns (bool isFinalized) {
@@ -395,15 +395,15 @@ contract GovCore is IGovCore {
     }
 
     function isOrganizationAdmin(uint64 orgId, address actor) public view returns (bool isAdmin) {
-        GovTypes.Organization storage organization = organizations[orgId];
+        IsoTypes.Organization storage organization = organizations[orgId];
         isAdmin = organization.id != 0 && organization.admin == actor;
     }
 
     function hasRole(
         uint64 orgId,
         address actor,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) external view returns (bool hasMatchingRole) {
         hasMatchingRole = _hasRole(orgId, actor, roleType, proposalType);
     }
@@ -412,8 +412,8 @@ contract GovCore is IGovCore {
         uint64 orgId,
         address actor,
         uint64 bodyId,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) external view returns (bool canAct) {
         canAct = _hasMandate(orgId, actor, bodyId, roleType, proposalType);
     }
@@ -422,7 +422,7 @@ contract GovCore is IGovCore {
         uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
-            GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
+            IsoTypes.Mandate storage mandate = mandates[mandateIds[index]];
             if (_isActiveBodyMembership(mandate, orgId, actor, bodyId)) {
                 return true;
             }
@@ -431,20 +431,20 @@ contract GovCore is IGovCore {
     }
 
     function bodyBelongsToOrg(uint64 orgId, uint64 bodyId) public view returns (bool belongs) {
-        GovTypes.Body storage body = bodies[bodyId];
+        IsoTypes.Body storage body = bodies[bodyId];
         belongs = body.id != 0 && body.orgId == orgId;
     }
 
     function _hasRole(
         uint64 orgId,
         address actor,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) internal view returns (bool hasMatchingRole) {
         uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
-            GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
+            IsoTypes.Mandate storage mandate = mandates[mandateIds[index]];
             if (_isActiveMandate(mandate, orgId, actor, roleType, proposalType)) {
                 return true;
             }
@@ -456,13 +456,13 @@ contract GovCore is IGovCore {
         uint64 orgId,
         address actor,
         uint64 bodyId,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) internal view returns (bool hasMatchingMandate) {
         uint64[] storage mandateIds = holderOrgMandates[actor][orgId];
         uint256 mandateCount = mandateIds.length;
         for (uint256 index = 0; index < mandateCount; index++) {
-            GovTypes.Mandate storage mandate = mandates[mandateIds[index]];
+            IsoTypes.Mandate storage mandate = mandates[mandateIds[index]];
             if (_isActiveMandateForBody(mandate, orgId, actor, bodyId, roleType, proposalType)) {
                 return true;
             }
@@ -471,15 +471,15 @@ contract GovCore is IGovCore {
     }
 
     function _isActiveMandate(
-        GovTypes.Mandate storage mandate,
+        IsoTypes.Mandate storage mandate,
         uint64 orgId,
         address actor,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) internal view returns (bool isValid) {
-        GovTypes.Role storage role = roles[mandate.roleId];
-        GovTypes.Body storage body = bodies[mandate.bodyId];
-        if (proposalType == GovTypes.ProposalType.Unknown) {
+        IsoTypes.Role storage role = roles[mandate.roleId];
+        IsoTypes.Body storage body = bodies[mandate.bodyId];
+        if (proposalType == IsoTypes.ProposalType.Unknown) {
             return false;
         }
         if (!_isMandateTimeValid(mandate, actor, orgId)) {
@@ -495,12 +495,12 @@ contract GovCore is IGovCore {
     }
 
     function _isActiveMandateForBody(
-        GovTypes.Mandate storage mandate,
+        IsoTypes.Mandate storage mandate,
         uint64 orgId,
         address actor,
         uint64 bodyId,
-        GovTypes.RoleType roleType,
-        GovTypes.ProposalType proposalType
+        IsoTypes.RoleType roleType,
+        IsoTypes.ProposalType proposalType
     ) internal view returns (bool isValid) {
         if (mandate.bodyId != bodyId) {
             return false;
@@ -509,13 +509,13 @@ contract GovCore is IGovCore {
     }
 
     function _isActiveBodyMembership(
-        GovTypes.Mandate storage mandate,
+        IsoTypes.Mandate storage mandate,
         uint64 orgId,
         address actor,
         uint64 bodyId
     ) internal view returns (bool isValid) {
-        GovTypes.Role storage role = roles[mandate.roleId];
-        GovTypes.Body storage body = bodies[mandate.bodyId];
+        IsoTypes.Role storage role = roles[mandate.roleId];
+        IsoTypes.Body storage body = bodies[mandate.bodyId];
         if (!_isMandateTimeValid(mandate, actor, orgId)) {
             return false;
         }
@@ -528,7 +528,7 @@ contract GovCore is IGovCore {
         isValid = body.id != 0 && body.orgId == orgId && body.active;
     }
 
-    function _isMandateTimeValid(GovTypes.Mandate storage mandate, address actor, uint64 orgId) internal view returns (bool isValid) {
+    function _isMandateTimeValid(IsoTypes.Mandate storage mandate, address actor, uint64 orgId) internal view returns (bool isValid) {
         uint64 currentTime = _currentTimestamp();
         if (!mandate.active || mandate.revoked) {
             return false;
@@ -546,7 +546,7 @@ contract GovCore is IGovCore {
     }
 
     function _requireOrgAdmin(uint64 orgId) internal view {
-        GovTypes.Organization storage organization = organizations[orgId];
+        IsoTypes.Organization storage organization = organizations[orgId];
         if (organization.id == 0) {
             revert OrganizationNotFound(orgId);
         }
@@ -556,11 +556,11 @@ contract GovCore is IGovCore {
     }
 
     function _requireActiveOrgAdmin(uint64 orgId) internal view {
-        GovTypes.Organization storage organization = organizations[orgId];
+        IsoTypes.Organization storage organization = organizations[orgId];
         if (organization.id == 0) {
             revert OrganizationNotFound(orgId);
         }
-        if (organization.status != GovTypes.OrganizationStatus.Active) {
+        if (organization.status != IsoTypes.OrganizationStatus.Active) {
             revert OrganizationNotActive(orgId);
         }
         if (organization.admin != msg.sender) {
@@ -574,7 +574,7 @@ contract GovCore is IGovCore {
         }
     }
 
-    function _requireBodyInOrg(uint64 orgId, uint64 bodyId) internal view returns (GovTypes.Body storage body) {
+    function _requireBodyInOrg(uint64 orgId, uint64 bodyId) internal view returns (IsoTypes.Body storage body) {
         body = bodies[bodyId];
         if (body.id == 0) {
             revert BodyNotFound(bodyId);
@@ -584,7 +584,7 @@ contract GovCore is IGovCore {
         }
     }
 
-    function _requireRoleInOrg(uint64 orgId, uint64 roleId) internal view returns (GovTypes.Role storage role) {
+    function _requireRoleInOrg(uint64 orgId, uint64 roleId) internal view returns (IsoTypes.Role storage role) {
         role = roles[roleId];
         if (role.id == 0) {
             revert RoleNotFound(roleId);
@@ -594,7 +594,7 @@ contract GovCore is IGovCore {
         }
     }
 
-    function _requireMandateInOrg(uint64 orgId, uint64 mandateId) internal view returns (GovTypes.Mandate storage mandate) {
+    function _requireMandateInOrg(uint64 orgId, uint64 mandateId) internal view returns (IsoTypes.Mandate storage mandate) {
         mandate = mandates[mandateId];
         if (mandate.id == 0) {
             revert MandateNotFound(mandateId);
@@ -605,13 +605,13 @@ contract GovCore is IGovCore {
     }
 
     function _validateStatusTransition(
-        GovTypes.OrganizationStatus currentStatus,
-        GovTypes.OrganizationStatus nextStatus
+        IsoTypes.OrganizationStatus currentStatus,
+        IsoTypes.OrganizationStatus nextStatus
     ) internal pure {
-        if (nextStatus == GovTypes.OrganizationStatus.None) {
+        if (nextStatus == IsoTypes.OrganizationStatus.None) {
             revert InvalidOrganizationStatus(nextStatus);
         }
-        if (currentStatus == GovTypes.OrganizationStatus.Archived && nextStatus != GovTypes.OrganizationStatus.Archived) {
+        if (currentStatus == IsoTypes.OrganizationStatus.Archived && nextStatus != IsoTypes.OrganizationStatus.Archived) {
             revert InvalidStatusTransition(currentStatus, nextStatus);
         }
     }
@@ -637,9 +637,9 @@ contract GovCore is IGovCore {
     }
 
     function _writePolicyRule(
-        GovTypes.PolicyRule storage rule,
+        IsoTypes.PolicyRule storage rule,
         uint64 orgId,
-        GovTypes.ProposalType proposalType,
+        IsoTypes.ProposalType proposalType,
         uint64 version,
         uint64[] calldata requiredApprovalBodies,
         uint64[] calldata vetoBodies,
@@ -659,7 +659,7 @@ contract GovCore is IGovCore {
         _writeUint64Array(rule.vetoBodies, vetoBodies);
     }
 
-    function _copyPolicyRule(GovTypes.PolicyRule storage storedRule) internal view returns (GovTypes.PolicyRule memory rule) {
+    function _copyPolicyRule(IsoTypes.PolicyRule storage storedRule) internal view returns (IsoTypes.PolicyRule memory rule) {
         rule.orgId = storedRule.orgId;
         rule.proposalType = storedRule.proposalType;
         rule.version = storedRule.version;

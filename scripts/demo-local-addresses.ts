@@ -1,20 +1,36 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const ENV_ADDRESS_NAMES = ["GOV_CORE_ADDRESS", "GOV_PROPOSALS_ADDRESS", "DEMO_TARGET_ADDRESS"] as const;
+const ENV_ADDRESS_NAMES = [
+  "ISONIA_CORE_ADDRESS",
+  "ISONIA_PROPOSALS_ADDRESS",
+  "DEMO_TARGET_ADDRESS",
+  "DEMO_OWNABLE_TARGET_ADDRESS",
+  "DEMO_ACCESS_CONTROL_TARGET_ADDRESS",
+  "DEMO_ACCESS_MANAGER_ADDRESS",
+  "DEMO_ACCESS_MANAGED_TARGET_ADDRESS",
+] as const;
 
 const IGNITION_ADDRESS_KEYS = {
-  govCore: "IsoniaDemoLocalModule#GovCore",
-  govProposals: "IsoniaDemoLocalModule#GovProposals",
+  isoCore: "IsoniaDemoLocalModule#IsoCore",
+  isoProposals: "IsoniaDemoLocalModule#IsoProposals",
   demoTarget: "IsoniaDemoLocalModule#DemoTarget",
   demoVotesToken: "IsoniaDemoLocalModule#IsoDemoVotesToken",
+  demoOwnableTarget: "IsoniaDemoLocalModule#IsoOwnableTarget",
+  demoAccessControlTarget: "IsoniaDemoLocalModule#IsoAccessControlTarget",
+  demoAccessManager: "IsoniaDemoLocalModule#IsoDemoAccessManager",
+  demoAccessManagedTarget: "IsoniaDemoLocalModule#IsoAccessManagedTarget",
 } as const;
 
 export interface DemoLocalAddressEnv {
-  readonly GOV_CORE_ADDRESS?: string;
-  readonly GOV_PROPOSALS_ADDRESS?: string;
+  readonly ISONIA_CORE_ADDRESS?: string;
+  readonly ISONIA_PROPOSALS_ADDRESS?: string;
   readonly DEMO_TARGET_ADDRESS?: string;
   readonly DEMO_VOTES_TOKEN_ADDRESS?: string;
+  readonly DEMO_OWNABLE_TARGET_ADDRESS?: string;
+  readonly DEMO_ACCESS_CONTROL_TARGET_ADDRESS?: string;
+  readonly DEMO_ACCESS_MANAGER_ADDRESS?: string;
+  readonly DEMO_ACCESS_MANAGED_TARGET_ADDRESS?: string;
 }
 
 export interface ResolveDemoLocalContractAddressesOptions {
@@ -24,10 +40,14 @@ export interface ResolveDemoLocalContractAddressesOptions {
 }
 
 export interface DemoLocalContractAddresses {
-  readonly govCore: string;
-  readonly govProposals: string;
+  readonly isoCore: string;
+  readonly isoProposals: string;
   readonly demoTarget: string;
   readonly demoVotesToken?: string;
+  readonly demoOwnableTarget: string;
+  readonly demoAccessControlTarget: string;
+  readonly demoAccessManager: string;
+  readonly demoAccessManagedTarget: string;
   readonly source: "env" | "ignition";
   readonly ignitionDeploymentFile?: string;
 }
@@ -35,34 +55,50 @@ export interface DemoLocalContractAddresses {
 export function resolveDemoLocalContractAddresses(options: ResolveDemoLocalContractAddressesOptions): DemoLocalContractAddresses {
   const env = options.env ?? process.env;
   const envAddresses = {
-    govCore: normalizeAddress(env.GOV_CORE_ADDRESS),
-    govProposals: normalizeAddress(env.GOV_PROPOSALS_ADDRESS),
+    isoCore: normalizeAddress(env.ISONIA_CORE_ADDRESS),
+    isoProposals: normalizeAddress(env.ISONIA_PROPOSALS_ADDRESS),
     demoTarget: normalizeAddress(env.DEMO_TARGET_ADDRESS),
     demoVotesToken: normalizeAddress(env.DEMO_VOTES_TOKEN_ADDRESS),
+    demoOwnableTarget: normalizeAddress(env.DEMO_OWNABLE_TARGET_ADDRESS),
+    demoAccessControlTarget: normalizeAddress(env.DEMO_ACCESS_CONTROL_TARGET_ADDRESS),
+    demoAccessManager: normalizeAddress(env.DEMO_ACCESS_MANAGER_ADDRESS),
+    demoAccessManagedTarget: normalizeAddress(env.DEMO_ACCESS_MANAGED_TARGET_ADDRESS),
   };
   const requiredEnvAddresses = {
-    govCore: envAddresses.govCore,
-    govProposals: envAddresses.govProposals,
+    isoCore: envAddresses.isoCore,
+    isoProposals: envAddresses.isoProposals,
     demoTarget: envAddresses.demoTarget,
+    demoOwnableTarget: envAddresses.demoOwnableTarget,
+    demoAccessControlTarget: envAddresses.demoAccessControlTarget,
+    demoAccessManager: envAddresses.demoAccessManager,
+    demoAccessManagedTarget: envAddresses.demoAccessManagedTarget,
   };
 
   const providedEnvCount = Object.values(requiredEnvAddresses).filter((value) => value !== undefined).length;
 
   if (providedEnvCount === ENV_ADDRESS_NAMES.length) {
     return {
-      govCore: envAddresses.govCore!,
-      govProposals: envAddresses.govProposals!,
+      isoCore: envAddresses.isoCore!,
+      isoProposals: envAddresses.isoProposals!,
       demoTarget: envAddresses.demoTarget!,
       ...(envAddresses.demoVotesToken === undefined ? {} : { demoVotesToken: envAddresses.demoVotesToken }),
+      demoOwnableTarget: envAddresses.demoOwnableTarget!,
+      demoAccessControlTarget: envAddresses.demoAccessControlTarget!,
+      demoAccessManager: envAddresses.demoAccessManager!,
+      demoAccessManagedTarget: envAddresses.demoAccessManagedTarget!,
       source: "env",
     };
   }
 
   if (providedEnvCount > 0) {
     const missing = [
-      envAddresses.govCore === undefined ? "GOV_CORE_ADDRESS" : undefined,
-      envAddresses.govProposals === undefined ? "GOV_PROPOSALS_ADDRESS" : undefined,
+      envAddresses.isoCore === undefined ? "ISONIA_CORE_ADDRESS" : undefined,
+      envAddresses.isoProposals === undefined ? "ISONIA_PROPOSALS_ADDRESS" : undefined,
       envAddresses.demoTarget === undefined ? "DEMO_TARGET_ADDRESS" : undefined,
+      envAddresses.demoOwnableTarget === undefined ? "DEMO_OWNABLE_TARGET_ADDRESS" : undefined,
+      envAddresses.demoAccessControlTarget === undefined ? "DEMO_ACCESS_CONTROL_TARGET_ADDRESS" : undefined,
+      envAddresses.demoAccessManager === undefined ? "DEMO_ACCESS_MANAGER_ADDRESS" : undefined,
+      envAddresses.demoAccessManagedTarget === undefined ? "DEMO_ACCESS_MANAGED_TARGET_ADDRESS" : undefined,
     ].filter((value): value is string => value !== undefined);
 
     throw new Error(
@@ -79,19 +115,35 @@ export function resolveDemoLocalContractAddresses(options: ResolveDemoLocalContr
   }
 
   const deployedAddresses = readIgnitionDeploymentFile(deploymentFile);
-  const govCore = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.govCore]);
-  const govProposals = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.govProposals]);
+  const isoCore = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.isoCore]);
+  const isoProposals = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.isoProposals]);
   const demoTarget = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoTarget]);
   const demoVotesToken = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoVotesToken]);
+  const demoOwnableTarget = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoOwnableTarget]);
+  const demoAccessControlTarget = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoAccessControlTarget]);
+  const demoAccessManager = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoAccessManager]);
+  const demoAccessManagedTarget = normalizeAddress(deployedAddresses[IGNITION_ADDRESS_KEYS.demoAccessManagedTarget]);
   const missingKeys: string[] = [];
-  if (govCore === undefined) {
-    missingKeys.push(IGNITION_ADDRESS_KEYS.govCore);
+  if (isoCore === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.isoCore);
   }
-  if (govProposals === undefined) {
-    missingKeys.push(IGNITION_ADDRESS_KEYS.govProposals);
+  if (isoProposals === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.isoProposals);
   }
   if (demoTarget === undefined) {
     missingKeys.push(IGNITION_ADDRESS_KEYS.demoTarget);
+  }
+  if (demoOwnableTarget === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.demoOwnableTarget);
+  }
+  if (demoAccessControlTarget === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.demoAccessControlTarget);
+  }
+  if (demoAccessManager === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.demoAccessManager);
+  }
+  if (demoAccessManagedTarget === undefined) {
+    missingKeys.push(IGNITION_ADDRESS_KEYS.demoAccessManagedTarget);
   }
 
   if (missingKeys.length > 0) {
@@ -101,10 +153,14 @@ export function resolveDemoLocalContractAddresses(options: ResolveDemoLocalContr
   }
 
   return {
-    govCore: govCore!,
-    govProposals: govProposals!,
+    isoCore: isoCore!,
+    isoProposals: isoProposals!,
     demoTarget: demoTarget!,
     ...(demoVotesToken === undefined ? {} : { demoVotesToken }),
+    demoOwnableTarget: demoOwnableTarget!,
+    demoAccessControlTarget: demoAccessControlTarget!,
+    demoAccessManager: demoAccessManager!,
+    demoAccessManagedTarget: demoAccessManagedTarget!,
     source: "ignition",
     ignitionDeploymentFile: deploymentFile,
   };

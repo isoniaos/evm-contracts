@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {GovTypes} from "./GovTypes.sol";
-import {IGovCore} from "./interfaces/IGovCore.sol";
+import {IsoTypes} from "./IsoTypes.sol";
+import {IIsoCore} from "./interfaces/IIsoCore.sol";
 import {IIsoOrgExecutor} from "./interfaces/IIsoOrgExecutor.sol";
 import {
     ZeroAddress,
@@ -30,16 +30,16 @@ import {
     OrgExecutorOrgMismatch,
     InvalidExecutionValue,
     ExecutionFailed
-} from "./GovErrors.sol";
+} from "./IsoErrors.sol";
 
-contract GovProposals {
-    IGovCore public immutable govCore;
+contract IsoProposals {
+    IIsoCore public immutable isoCore;
     uint64 public nextProposalId = 1;
 
-    mapping(uint64 => mapping(address => GovTypes.ExecutionTargetRule)) public executionTargetRules;
+    mapping(uint64 => mapping(address => IsoTypes.ExecutionTargetRule)) public executionTargetRules;
     mapping(uint64 => mapping(address => mapping(bytes4 => bool))) public executionSelectorRules;
     mapping(uint64 => address) public orgExecutors;
-    mapping(uint64 => GovTypes.Proposal) public proposals;
+    mapping(uint64 => IsoTypes.Proposal) public proposals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalApprovals;
     mapping(uint64 => mapping(uint64 => bool)) public proposalVetoes;
     mapping(uint64 => mapping(uint64 => address)) public proposalDecisionActor;
@@ -50,7 +50,7 @@ contract GovProposals {
     event ProposalCreated(
         uint64 indexed orgId,
         uint64 indexed proposalId,
-        GovTypes.ProposalType indexed proposalType,
+        IsoTypes.ProposalType indexed proposalType,
         uint64 policyVersion,
         address creator,
         address target,
@@ -76,15 +76,15 @@ contract GovProposals {
     event ProposalStatusChanged(
         uint64 indexed orgId,
         uint64 indexed proposalId,
-        GovTypes.ProposalStatus previousStatus,
-        GovTypes.ProposalStatus newStatus
+        IsoTypes.ProposalStatus previousStatus,
+        IsoTypes.ProposalStatus newStatus
     );
 
-    constructor(address govCoreAddress) {
-        if (govCoreAddress == address(0)) {
+    constructor(address isoCoreAddress) {
+        if (isoCoreAddress == address(0)) {
             revert ZeroAddress();
         }
-        govCore = IGovCore(govCoreAddress);
+        isoCore = IIsoCore(isoCoreAddress);
     }
 
     function setExecutionTargetRule(
@@ -97,7 +97,7 @@ contract GovProposals {
         if (target == address(0)) {
             revert ZeroAddress();
         }
-        executionTargetRules[orgId][target] = GovTypes.ExecutionTargetRule({enabled: enabled, maxValue: maxValue});
+        executionTargetRules[orgId][target] = IsoTypes.ExecutionTargetRule({enabled: enabled, maxValue: maxValue});
         emit ExecutionTargetRuleUpdated(orgId, target, enabled, maxValue, msg.sender);
     }
 
@@ -139,23 +139,23 @@ contract GovProposals {
 
     function createProposal(
         uint64 orgId,
-        GovTypes.ProposalType proposalType,
+        IsoTypes.ProposalType proposalType,
         address target,
         uint256 value,
         bytes4 actionSelector,
         bytes32 dataHash,
         string calldata metadataURI
     ) external returns (uint64 proposalId) {
-        GovTypes.PolicyRule memory rule = _requireEnabledPolicy(orgId, proposalType);
-        GovTypes.ProposalStatus initialStatus = rule.requiredApprovalBodies.length == 0
-            ? GovTypes.ProposalStatus.Approved
-            : GovTypes.ProposalStatus.UnderReview;
-        if (!govCore.isOrganizationAdmin(orgId, msg.sender) && !govCore.hasRole(orgId, msg.sender, GovTypes.RoleType.Proposer, proposalType)) {
+        IsoTypes.PolicyRule memory rule = _requireEnabledPolicy(orgId, proposalType);
+        IsoTypes.ProposalStatus initialStatus = rule.requiredApprovalBodies.length == 0
+            ? IsoTypes.ProposalStatus.Approved
+            : IsoTypes.ProposalStatus.UnderReview;
+        if (!isoCore.isOrganizationAdmin(orgId, msg.sender) && !isoCore.hasRole(orgId, msg.sender, IsoTypes.RoleType.Proposer, proposalType)) {
             revert Unauthorized(msg.sender);
         }
         proposalId = nextProposalId;
         nextProposalId = proposalId + 1;
-        proposals[proposalId] = GovTypes.Proposal({
+        proposals[proposalId] = IsoTypes.Proposal({
             id: proposalId,
             orgId: orgId,
             proposalType: proposalType,
@@ -176,12 +176,12 @@ contract GovProposals {
     }
 
     function approveProposal(uint64 orgId, uint64 proposalId, uint64 bodyId) external {
-        GovTypes.Proposal storage proposal = _requireMutableProposal(orgId, proposalId);
-        GovTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
+        IsoTypes.Proposal storage proposal = _requireMutableProposal(orgId, proposalId);
+        IsoTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
         if (!_containsBody(rule.requiredApprovalBodies, bodyId)) {
             revert BodyNotRequiredApprover(bodyId);
         }
-        if (!govCore.canActOnProposalType(orgId, msg.sender, bodyId, GovTypes.RoleType.Approver, proposal.proposalType)) {
+        if (!isoCore.canActOnProposalType(orgId, msg.sender, bodyId, IsoTypes.RoleType.Approver, proposal.proposalType)) {
             revert Unauthorized(msg.sender);
         }
         if (proposalApprovals[proposalId][bodyId]) {
@@ -190,21 +190,21 @@ contract GovProposals {
         proposalApprovals[proposalId][bodyId] = true;
         proposalDecisionActor[proposalId][bodyId] = msg.sender;
         if (_allApprovalsCollected(proposalId, rule.requiredApprovalBodies)) {
-            _setProposalStatus(proposal, GovTypes.ProposalStatus.Approved);
+            _setProposalStatus(proposal, IsoTypes.ProposalStatus.Approved);
         }
         emit ProposalApproved(orgId, proposalId, bodyId, msg.sender);
     }
 
     function vetoProposal(uint64 orgId, uint64 proposalId, uint64 bodyId) external {
-        GovTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
-        GovTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
+        IsoTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
+        IsoTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
         if (!_isVetoableStatus(proposal.status)) {
             revert InvalidProposalStatus(proposal.status);
         }
         if (!_containsBody(rule.vetoBodies, bodyId)) {
             revert BodyNotVetoer(bodyId);
         }
-        if (!govCore.canActOnProposalType(orgId, msg.sender, bodyId, GovTypes.RoleType.Vetoer, proposal.proposalType)) {
+        if (!isoCore.canActOnProposalType(orgId, msg.sender, bodyId, IsoTypes.RoleType.Vetoer, proposal.proposalType)) {
             revert Unauthorized(msg.sender);
         }
         if (proposalVetoes[proposalId][bodyId]) {
@@ -212,27 +212,27 @@ contract GovProposals {
         }
         proposalVetoes[proposalId][bodyId] = true;
         proposalDecisionActor[proposalId][bodyId] = msg.sender;
-        _setProposalStatus(proposal, GovTypes.ProposalStatus.Vetoed);
+        _setProposalStatus(proposal, IsoTypes.ProposalStatus.Vetoed);
         emit ProposalVetoed(orgId, proposalId, bodyId, msg.sender);
     }
 
     function queueProposal(uint64 orgId, uint64 proposalId) external {
-        GovTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
-        GovTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
-        if (proposal.status != GovTypes.ProposalStatus.Approved) {
+        IsoTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
+        IsoTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
+        if (proposal.status != IsoTypes.ProposalStatus.Approved) {
             revert InvalidProposalStatus(proposal.status);
         }
-        _setProposalStatus(proposal, GovTypes.ProposalStatus.Queued);
+        _setProposalStatus(proposal, IsoTypes.ProposalStatus.Queued);
         proposal.queuedAt = _currentTimestamp();
         proposal.executableAt = proposal.queuedAt + rule.timelockSeconds;
         emit ProposalQueued(orgId, proposalId, proposal.queuedAt, proposal.executableAt);
     }
 
     function executeProposal(uint64 orgId, uint64 proposalId, bytes calldata actionData) external payable {
-        GovTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
-        GovTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
+        IsoTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
+        IsoTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
         _requireExecutableState(proposal, rule, proposalId);
-        if (!govCore.canActOnProposalType(orgId, msg.sender, rule.executorBody, GovTypes.RoleType.Executor, proposal.proposalType)) {
+        if (!isoCore.canActOnProposalType(orgId, msg.sender, rule.executorBody, IsoTypes.RoleType.Executor, proposal.proposalType)) {
             revert Unauthorized(msg.sender);
         }
         if (proposal.target == address(0)) {
@@ -242,7 +242,7 @@ contract GovProposals {
         if (actualSelector != proposal.actionSelector) {
             revert ActionSelectorMismatch(proposal.actionSelector, actualSelector);
         }
-        GovTypes.ExecutionTargetRule memory executionRule = _requireExecutionPermission(proposal.orgId, proposal.target, proposal.actionSelector);
+        IsoTypes.ExecutionTargetRule memory executionRule = _requireExecutionPermission(proposal.orgId, proposal.target, proposal.actionSelector);
         if (proposal.value > executionRule.maxValue) {
             revert ExecutionValueLimitExceeded(proposal.orgId, proposal.target, executionRule.maxValue, proposal.value);
         }
@@ -256,7 +256,7 @@ contract GovProposals {
         if (msg.value != proposal.value) {
             revert InvalidExecutionValue(proposal.value, msg.value);
         }
-        _setProposalStatus(proposal, GovTypes.ProposalStatus.Executed);
+        _setProposalStatus(proposal, IsoTypes.ProposalStatus.Executed);
         proposal.executedAt = _currentTimestamp();
         address managedExecutor = orgExecutors[proposal.orgId];
         if (managedExecutor == address(0)) {
@@ -288,20 +288,20 @@ contract GovProposals {
     }
 
     function cancelProposal(uint64 orgId, uint64 proposalId) external {
-        GovTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
-        GovTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
+        IsoTypes.Proposal storage proposal = _requireProposalInOrg(orgId, proposalId);
+        IsoTypes.PolicyRule memory rule = _requireEnabledProposalPolicy(proposal);
         if (!_isCancellableStatus(proposal.status)) {
             revert InvalidProposalStatus(proposal.status);
         }
-        if (govCore.isOrganizationAdmin(orgId, msg.sender) && !govCore.isOrganizationFinalized(orgId)) {
-            _setProposalStatus(proposal, GovTypes.ProposalStatus.Cancelled);
+        if (isoCore.isOrganizationAdmin(orgId, msg.sender) && !isoCore.isOrganizationFinalized(orgId)) {
+            _setProposalStatus(proposal, IsoTypes.ProposalStatus.Cancelled);
             emit ProposalCancelled(orgId, proposalId, msg.sender);
             return;
         }
         if (proposal.creator != msg.sender || _hasAnyApproval(proposalId, rule.requiredApprovalBodies)) {
             revert Unauthorized(msg.sender);
         }
-        _setProposalStatus(proposal, GovTypes.ProposalStatus.Cancelled);
+        _setProposalStatus(proposal, IsoTypes.ProposalStatus.Cancelled);
         emit ProposalCancelled(orgId, proposalId, msg.sender);
     }
 
@@ -316,8 +316,8 @@ contract GovProposals {
         } catch {
             revert InvalidOrgExecutor(executor);
         }
-        try IIsoOrgExecutor(executor).govProposals() returns (address executorGovProposals) {
-            if (executorGovProposals != address(this)) {
+        try IIsoOrgExecutor(executor).isoProposals() returns (address executorIsoProposals) {
+            if (executorIsoProposals != address(this)) {
                 revert InvalidOrgExecutor(executor);
             }
         } catch {
@@ -326,13 +326,13 @@ contract GovProposals {
     }
 
     function _requireBootstrapOrgAdmin(uint64 orgId) internal view {
-        if (!govCore.isOrganizationActive(orgId)) {
+        if (!isoCore.isOrganizationActive(orgId)) {
             revert OrganizationNotActive(orgId);
         }
-        if (!govCore.isOrganizationAdmin(orgId, msg.sender)) {
+        if (!isoCore.isOrganizationAdmin(orgId, msg.sender)) {
             revert Unauthorized(msg.sender);
         }
-        if (govCore.isOrganizationFinalized(orgId)) {
+        if (isoCore.isOrganizationFinalized(orgId)) {
             revert OrganizationAlreadyFinalized(orgId);
         }
     }
@@ -341,7 +341,7 @@ contract GovProposals {
         uint64 orgId,
         address target,
         bytes4 selector
-    ) internal view returns (GovTypes.ExecutionTargetRule memory rule) {
+    ) internal view returns (IsoTypes.ExecutionTargetRule memory rule) {
         if (target == address(0)) {
             revert ZeroAddress();
         }
@@ -363,30 +363,30 @@ contract GovProposals {
         }
     }
 
-    function _requireEnabledPolicy(uint64 orgId, GovTypes.ProposalType proposalType) internal view returns (GovTypes.PolicyRule memory rule) {
-        if (!govCore.isOrganizationActive(orgId)) {
+    function _requireEnabledPolicy(uint64 orgId, IsoTypes.ProposalType proposalType) internal view returns (IsoTypes.PolicyRule memory rule) {
+        if (!isoCore.isOrganizationActive(orgId)) {
             revert PolicyRuleNotEnabled(orgId, proposalType);
         }
-        if (proposalType == GovTypes.ProposalType.Unknown) {
+        if (proposalType == IsoTypes.ProposalType.Unknown) {
             revert InvalidProposalType();
         }
-        rule = govCore.getPolicyRule(orgId, proposalType);
+        rule = isoCore.getPolicyRule(orgId, proposalType);
         if (!rule.enabled) {
             revert PolicyRuleNotEnabled(orgId, proposalType);
         }
     }
 
-    function _requireEnabledProposalPolicy(GovTypes.Proposal storage proposal) internal view returns (GovTypes.PolicyRule memory rule) {
-        if (!govCore.isOrganizationActive(proposal.orgId)) {
+    function _requireEnabledProposalPolicy(IsoTypes.Proposal storage proposal) internal view returns (IsoTypes.PolicyRule memory rule) {
+        if (!isoCore.isOrganizationActive(proposal.orgId)) {
             revert PolicyRuleNotEnabled(proposal.orgId, proposal.proposalType);
         }
-        rule = govCore.getPolicyRuleAtVersion(proposal.orgId, proposal.proposalType, proposal.policyVersion);
+        rule = isoCore.getPolicyRuleAtVersion(proposal.orgId, proposal.proposalType, proposal.policyVersion);
         if (!rule.enabled) {
             revert PolicyRuleNotEnabled(proposal.orgId, proposal.proposalType);
         }
     }
 
-    function _requireProposalInOrg(uint64 orgId, uint64 proposalId) internal view returns (GovTypes.Proposal storage proposal) {
+    function _requireProposalInOrg(uint64 orgId, uint64 proposalId) internal view returns (IsoTypes.Proposal storage proposal) {
         proposal = proposals[proposalId];
         if (proposal.id == 0) {
             revert ProposalNotFound(proposalId);
@@ -396,15 +396,15 @@ contract GovProposals {
         }
     }
 
-    function _requireMutableProposal(uint64 orgId, uint64 proposalId) internal view returns (GovTypes.Proposal storage proposal) {
+    function _requireMutableProposal(uint64 orgId, uint64 proposalId) internal view returns (IsoTypes.Proposal storage proposal) {
         proposal = _requireProposalInOrg(orgId, proposalId);
-        if (proposal.status != GovTypes.ProposalStatus.Created && proposal.status != GovTypes.ProposalStatus.UnderReview) {
+        if (proposal.status != IsoTypes.ProposalStatus.Created && proposal.status != IsoTypes.ProposalStatus.UnderReview) {
             revert InvalidProposalStatus(proposal.status);
         }
     }
 
-    function _setProposalStatus(GovTypes.Proposal storage proposal, GovTypes.ProposalStatus nextStatus) internal {
-        GovTypes.ProposalStatus previousStatus = proposal.status;
+    function _setProposalStatus(IsoTypes.Proposal storage proposal, IsoTypes.ProposalStatus nextStatus) internal {
+        IsoTypes.ProposalStatus previousStatus = proposal.status;
         if (previousStatus == nextStatus) {
             return;
         }
@@ -413,8 +413,8 @@ contract GovProposals {
     }
 
     function _requireExecutableState(
-        GovTypes.Proposal storage proposal,
-        GovTypes.PolicyRule memory rule,
+        IsoTypes.Proposal storage proposal,
+        IsoTypes.PolicyRule memory rule,
         uint64 proposalId
     ) internal view {
         if (!_isExecutableStatus(proposal.status)) {
@@ -424,10 +424,10 @@ contract GovProposals {
             revert MissingRequiredApprovals(proposalId);
         }
         if (_hasAnyVeto(proposalId, rule.vetoBodies)) {
-            revert InvalidProposalStatus(GovTypes.ProposalStatus.Vetoed);
+            revert InvalidProposalStatus(IsoTypes.ProposalStatus.Vetoed);
         }
         if (rule.timelockSeconds != 0) {
-            if (proposal.status != GovTypes.ProposalStatus.Queued) {
+            if (proposal.status != IsoTypes.ProposalStatus.Queued) {
                 revert InvalidProposalStatus(proposal.status);
             }
             if (_currentTimestamp() < proposal.executableAt) {
@@ -476,22 +476,22 @@ contract GovProposals {
         contains = false;
     }
 
-    function _isVetoableStatus(GovTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
-        isAllowed = status != GovTypes.ProposalStatus.Executed
-            && status != GovTypes.ProposalStatus.Cancelled
-            && status != GovTypes.ProposalStatus.Vetoed
-            && status != GovTypes.ProposalStatus.Expired;
+    function _isVetoableStatus(IsoTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
+        isAllowed = status != IsoTypes.ProposalStatus.Executed
+            && status != IsoTypes.ProposalStatus.Cancelled
+            && status != IsoTypes.ProposalStatus.Vetoed
+            && status != IsoTypes.ProposalStatus.Expired;
     }
 
-    function _isExecutableStatus(GovTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
-        isAllowed = status == GovTypes.ProposalStatus.Approved || status == GovTypes.ProposalStatus.Queued;
+    function _isExecutableStatus(IsoTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
+        isAllowed = status == IsoTypes.ProposalStatus.Approved || status == IsoTypes.ProposalStatus.Queued;
     }
 
-    function _isCancellableStatus(GovTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
-        isAllowed = status != GovTypes.ProposalStatus.Executed
-            && status != GovTypes.ProposalStatus.Cancelled
-            && status != GovTypes.ProposalStatus.Vetoed
-            && status != GovTypes.ProposalStatus.Expired;
+    function _isCancellableStatus(IsoTypes.ProposalStatus status) internal pure returns (bool isAllowed) {
+        isAllowed = status != IsoTypes.ProposalStatus.Executed
+            && status != IsoTypes.ProposalStatus.Cancelled
+            && status != IsoTypes.ProposalStatus.Vetoed
+            && status != IsoTypes.ProposalStatus.Expired;
     }
 
     function _currentTimestamp() internal view returns (uint64 timestamp) {

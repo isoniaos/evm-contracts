@@ -1,8 +1,8 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 export default buildModule("IsoniaProtocolCoreModule", (m) => {
-  const govCore = m.contract("GovCore");
-  const govProposals = m.contract("GovProposals", [govCore]);
+  const isoCore = m.contract("IsoCore");
+  const isoProposals = m.contract("IsoProposals", [isoCore]);
 
-  return { govCore, govProposals };
+  return { isoCore, isoProposals };
 });

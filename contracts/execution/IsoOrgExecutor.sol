@@ -10,11 +10,11 @@ import {
     InvalidExecutionValue,
     ExecutionFailed,
     OrgExecutorOrgMismatch
-} from "../GovErrors.sol";
+} from "../IsoErrors.sol";
 import {IIsoOrgExecutor} from "../interfaces/IIsoOrgExecutor.sol";
 
 contract IsoOrgExecutor is IIsoOrgExecutor {
-    address public immutable govProposals;
+    address public immutable isoProposals;
     uint64 public immutable orgId;
 
     event ManagedCallExecuted(
@@ -27,11 +27,11 @@ contract IsoOrgExecutor is IIsoOrgExecutor {
         bytes32 dataHash
     );
 
-    constructor(address govProposalsAddress, uint64 executorOrgId) {
-        if (govProposalsAddress == address(0)) {
+    constructor(address isoProposalsAddress, uint64 executorOrgId) {
+        if (isoProposalsAddress == address(0)) {
             revert ZeroAddress();
         }
-        govProposals = govProposalsAddress;
+        isoProposals = isoProposalsAddress;
         orgId = executorOrgId;
     }
 
@@ -44,7 +44,7 @@ contract IsoOrgExecutor is IIsoOrgExecutor {
         bytes32 dataHash,
         bytes calldata actionData
     ) external payable returns (bytes memory result) {
-        if (msg.sender != govProposals) {
+        if (msg.sender != isoProposals) {
             revert Unauthorized(msg.sender);
         }
         if (requestedOrgId != orgId) {

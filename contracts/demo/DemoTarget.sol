@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ZeroAddress, Unauthorized} from "../GovErrors.sol";
+import {ZeroAddress, Unauthorized} from "../IsoErrors.sol";
 
 error NativePaymentTransferFailed(address recipient, uint256 amount);
 
 contract DemoTarget {
     address public immutable owner;
-    address public govProposals;
+    address public isoProposals;
     uint64 public lastOrgId;
     uint256 public number;
     bytes32 public lastActionHash;
@@ -18,7 +18,7 @@ contract DemoTarget {
     mapping(uint64 => mapping(bytes32 => bool)) public obligationCancelled;
     mapping(uint64 => mapping(bytes32 => string)) public obligationCancellationReason;
 
-    event GovProposalsSet(address indexed govProposalsAddress);
+    event IsoProposalsSet(address indexed isoProposalsAddress);
     event NumberSet(uint64 indexed orgId, uint256 number, uint256 value);
     event FeatureEnabledSet(uint64 indexed orgId, bytes32 indexed feature, bool enabled);
     event UintParamSet(uint64 indexed orgId, bytes32 indexed key, uint256 value);
@@ -33,8 +33,8 @@ contract DemoTarget {
         _;
     }
 
-    modifier onlyGovProposals() {
-        if (msg.sender != govProposals) {
+    modifier onlyIsoProposals() {
+        if (msg.sender != isoProposals) {
             revert Unauthorized(msg.sender);
         }
         _;
@@ -47,36 +47,36 @@ contract DemoTarget {
         owner = ownerAddress;
     }
 
-    function setGovProposals(address govProposalsAddress) external onlyOwner {
-        if (govProposalsAddress == address(0)) {
+    function setIsoProposals(address isoProposalsAddress) external onlyOwner {
+        if (isoProposalsAddress == address(0)) {
             revert ZeroAddress();
         }
-        govProposals = govProposalsAddress;
-        emit GovProposalsSet(govProposalsAddress);
+        isoProposals = isoProposalsAddress;
+        emit IsoProposalsSet(isoProposalsAddress);
     }
 
-    function setNumber(uint64 orgId, uint256 newNumber) external payable onlyGovProposals {
+    function setNumber(uint64 orgId, uint256 newNumber) external payable onlyIsoProposals {
         lastOrgId = orgId;
         number = newNumber;
         lastActionHash = keccak256(msg.data);
         emit NumberSet(orgId, newNumber, msg.value);
     }
 
-    function setFeatureEnabled(uint64 orgId, bytes32 feature, bool enabled) external onlyGovProposals {
+    function setFeatureEnabled(uint64 orgId, bytes32 feature, bool enabled) external onlyIsoProposals {
         lastOrgId = orgId;
         featureEnabled[orgId][feature] = enabled;
         lastActionHash = keccak256(msg.data);
         emit FeatureEnabledSet(orgId, feature, enabled);
     }
 
-    function setUintParam(uint64 orgId, bytes32 key, uint256 value) external onlyGovProposals {
+    function setUintParam(uint64 orgId, bytes32 key, uint256 value) external onlyIsoProposals {
         lastOrgId = orgId;
         uintParams[orgId][key] = value;
         lastActionHash = keccak256(msg.data);
         emit UintParamSet(orgId, key, value);
     }
 
-    function releaseNativePayment(uint64 orgId, bytes32 obligationId, address payable recipient) external payable onlyGovProposals {
+    function releaseNativePayment(uint64 orgId, bytes32 obligationId, address payable recipient) external payable onlyIsoProposals {
         if (recipient == address(0)) {
             revert ZeroAddress();
         }
@@ -90,14 +90,14 @@ contract DemoTarget {
         emit NativePaymentReleased(orgId, obligationId, recipient, amount);
     }
 
-    function markObligationAccepted(uint64 orgId, bytes32 obligationId) external onlyGovProposals {
+    function markObligationAccepted(uint64 orgId, bytes32 obligationId) external onlyIsoProposals {
         lastOrgId = orgId;
         obligationAccepted[orgId][obligationId] = true;
         lastActionHash = keccak256(msg.data);
         emit ObligationAccepted(orgId, obligationId);
     }
 
-    function markObligationCancelled(uint64 orgId, bytes32 obligationId, string calldata reason) external onlyGovProposals {
+    function markObligationCancelled(uint64 orgId, bytes32 obligationId, string calldata reason) external onlyIsoProposals {
         lastOrgId = orgId;
         obligationCancelled[orgId][obligationId] = true;
         obligationCancellationReason[orgId][obligationId] = reason;

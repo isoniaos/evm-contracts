@@ -46,7 +46,7 @@ git diff --check
 - Keep protocol behavior explicit, generic, and first-party.
 - Preserve `orgId` isolation, policy snapshot/version semantics, proposal lifecycle semantics, and execution checks.
 - Treat contracts as authoritative only for the state they model.
-- Keep demo contracts, mocks, fixtures, local proof targets, and presentation harnesses isolated from protocol core.
+- Keep demo contracts, mocks, fixtures, local proof targets, target-compatibility examples, and presentation harnesses isolated from protocol core.
 - Treat target-contract events and external records as evidence or context unless a protocol change explicitly models them as authority.
 - Keep type safety, NatSpec clarity, and migration safety proportional to the behavior being changed.
 - Do not implement ISO tokenomics or launch-token behavior here.

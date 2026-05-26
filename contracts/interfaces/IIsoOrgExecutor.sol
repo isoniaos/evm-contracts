@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 interface IIsoOrgExecutor {
-    function govProposals() external view returns (address);
+    function isoProposals() external view returns (address);
     function orgId() external view returns (uint64);
 
     function executeGovernedCall(

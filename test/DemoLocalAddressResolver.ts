@@ -4,10 +4,14 @@ import { join } from "node:path";
 import { resolveDemoLocalContractAddresses } from "../scripts/demo-local-addresses.js";
 
 const CHAIN_ID = 31337;
-const GOV_CORE_ADDRESS = "0x1111111111111111111111111111111111111111";
-const GOV_PROPOSALS_ADDRESS = "0x2222222222222222222222222222222222222222";
+const ISONIA_CORE_ADDRESS = "0x1111111111111111111111111111111111111111";
+const ISONIA_PROPOSALS_ADDRESS = "0x2222222222222222222222222222222222222222";
 const DEMO_TARGET_ADDRESS = "0x3333333333333333333333333333333333333333";
 const DEMO_VOTES_TOKEN_ADDRESS = "0x4444444444444444444444444444444444444444";
+const DEMO_OWNABLE_TARGET_ADDRESS = "0x5555555555555555555555555555555555555555";
+const DEMO_ACCESS_CONTROL_TARGET_ADDRESS = "0x6666666666666666666666666666666666666666";
+const DEMO_ACCESS_MANAGER_ADDRESS = "0x7777777777777777777777777777777777777777";
+const DEMO_ACCESS_MANAGED_TARGET_ADDRESS = "0x8888888888888888888888888888888888888888";
 
 describe("demo-local address resolver", function () {
   const temporaryRoots: string[] = [];
@@ -18,21 +22,29 @@ describe("demo-local address resolver", function () {
     }
   });
 
-  it("uses all three explicit env addresses", function () {
+  it("uses all required explicit env addresses", function () {
     const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {
-        GOV_CORE_ADDRESS,
-        GOV_PROPOSALS_ADDRESS,
+        ISONIA_CORE_ADDRESS,
+        ISONIA_PROPOSALS_ADDRESS,
         DEMO_TARGET_ADDRESS,
+        DEMO_OWNABLE_TARGET_ADDRESS,
+        DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+        DEMO_ACCESS_MANAGER_ADDRESS,
+        DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       },
       projectRoot: createTemporaryProjectRoot(),
     });
 
     expect(addresses).to.deep.equal({
-      govCore: GOV_CORE_ADDRESS,
-      govProposals: GOV_PROPOSALS_ADDRESS,
+      isoCore: ISONIA_CORE_ADDRESS,
+      isoProposals: ISONIA_PROPOSALS_ADDRESS,
       demoTarget: DEMO_TARGET_ADDRESS,
+      demoOwnableTarget: DEMO_OWNABLE_TARGET_ADDRESS,
+      demoAccessControlTarget: DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+      demoAccessManager: DEMO_ACCESS_MANAGER_ADDRESS,
+      demoAccessManagedTarget: DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       source: "env",
     });
   });
@@ -41,19 +53,27 @@ describe("demo-local address resolver", function () {
     const addresses = resolveDemoLocalContractAddresses({
       chainId: CHAIN_ID,
       env: {
-        GOV_CORE_ADDRESS,
-        GOV_PROPOSALS_ADDRESS,
+        ISONIA_CORE_ADDRESS,
+        ISONIA_PROPOSALS_ADDRESS,
         DEMO_TARGET_ADDRESS,
         DEMO_VOTES_TOKEN_ADDRESS,
+        DEMO_OWNABLE_TARGET_ADDRESS,
+        DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+        DEMO_ACCESS_MANAGER_ADDRESS,
+        DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       },
       projectRoot: createTemporaryProjectRoot(),
     });
 
     expect(addresses).to.deep.equal({
-      govCore: GOV_CORE_ADDRESS,
-      govProposals: GOV_PROPOSALS_ADDRESS,
+      isoCore: ISONIA_CORE_ADDRESS,
+      isoProposals: ISONIA_PROPOSALS_ADDRESS,
       demoTarget: DEMO_TARGET_ADDRESS,
       demoVotesToken: DEMO_VOTES_TOKEN_ADDRESS,
+      demoOwnableTarget: DEMO_OWNABLE_TARGET_ADDRESS,
+      demoAccessControlTarget: DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+      demoAccessManager: DEMO_ACCESS_MANAGER_ADDRESS,
+      demoAccessManagedTarget: DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       source: "env",
     });
   });
@@ -63,14 +83,15 @@ describe("demo-local address resolver", function () {
       resolveDemoLocalContractAddresses({
         chainId: CHAIN_ID,
         env: {
-          GOV_CORE_ADDRESS,
-          GOV_PROPOSALS_ADDRESS,
+          ISONIA_CORE_ADDRESS,
+          ISONIA_PROPOSALS_ADDRESS,
         },
         projectRoot: createTemporaryProjectRoot(),
       });
 
-    expect(resolve).to.throw("Set all of GOV_CORE_ADDRESS, GOV_PROPOSALS_ADDRESS, DEMO_TARGET_ADDRESS");
+    expect(resolve).to.throw("Set all of ISONIA_CORE_ADDRESS, ISONIA_PROPOSALS_ADDRESS, DEMO_TARGET_ADDRESS");
     expect(resolve).to.throw("Missing: DEMO_TARGET_ADDRESS");
+    expect(resolve).to.throw("DEMO_ACCESS_MANAGED_TARGET_ADDRESS");
   });
 
   it("uses local Ignition deployed addresses when env addresses are unset", function () {
@@ -84,9 +105,13 @@ describe("demo-local address resolver", function () {
     });
 
     expect(addresses).to.deep.equal({
-      govCore: GOV_CORE_ADDRESS,
-      govProposals: GOV_PROPOSALS_ADDRESS,
+      isoCore: ISONIA_CORE_ADDRESS,
+      isoProposals: ISONIA_PROPOSALS_ADDRESS,
       demoTarget: DEMO_TARGET_ADDRESS,
+      demoOwnableTarget: DEMO_OWNABLE_TARGET_ADDRESS,
+      demoAccessControlTarget: DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+      demoAccessManager: DEMO_ACCESS_MANAGER_ADDRESS,
+      demoAccessManagedTarget: DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       source: "ignition",
       ignitionDeploymentFile: deploymentFile,
     });
@@ -103,10 +128,14 @@ describe("demo-local address resolver", function () {
     });
 
     expect(addresses).to.deep.equal({
-      govCore: GOV_CORE_ADDRESS,
-      govProposals: GOV_PROPOSALS_ADDRESS,
+      isoCore: ISONIA_CORE_ADDRESS,
+      isoProposals: ISONIA_PROPOSALS_ADDRESS,
       demoTarget: DEMO_TARGET_ADDRESS,
       demoVotesToken: DEMO_VOTES_TOKEN_ADDRESS,
+      demoOwnableTarget: DEMO_OWNABLE_TARGET_ADDRESS,
+      demoAccessControlTarget: DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+      demoAccessManager: DEMO_ACCESS_MANAGER_ADDRESS,
+      demoAccessManagedTarget: DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
       source: "ignition",
       ignitionDeploymentFile: deploymentFile,
     });
@@ -137,9 +166,11 @@ describe("demo-local address resolver", function () {
         projectRoot,
       });
 
-    expect(resolve).to.throw("IsoniaDemoLocalModule#GovCore");
-    expect(resolve).to.throw("IsoniaDemoLocalModule#GovProposals");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#IsoCore");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#IsoProposals");
     expect(resolve).to.throw("IsoniaDemoLocalModule#DemoTarget");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#IsoOwnableTarget");
+    expect(resolve).to.throw("IsoniaDemoLocalModule#IsoAccessManagedTarget");
     expect(resolve).to.throw("corepack pnpm deploy:demo:local");
   });
 
@@ -172,8 +203,8 @@ function writeCoreIgnitionDeployment(projectRoot: string, chainId: number): stri
     deploymentFile,
     JSON.stringify(
       {
-        "IsoniaProtocolCoreModule#GovCore": GOV_CORE_ADDRESS,
-        "IsoniaProtocolCoreModule#GovProposals": GOV_PROPOSALS_ADDRESS,
+        "IsoniaProtocolCoreModule#IsoCore": ISONIA_CORE_ADDRESS,
+        "IsoniaProtocolCoreModule#IsoProposals": ISONIA_PROPOSALS_ADDRESS,
       },
       null,
       2,
@@ -193,8 +224,12 @@ function writeIgnitionDeployment(projectRoot: string, chainId: number, includeDe
     JSON.stringify(
       {
         "IsoniaDemoLocalModule#DemoTarget": DEMO_TARGET_ADDRESS,
-        "IsoniaDemoLocalModule#GovCore": GOV_CORE_ADDRESS,
-        "IsoniaDemoLocalModule#GovProposals": GOV_PROPOSALS_ADDRESS,
+        "IsoniaDemoLocalModule#IsoCore": ISONIA_CORE_ADDRESS,
+        "IsoniaDemoLocalModule#IsoProposals": ISONIA_PROPOSALS_ADDRESS,
+        "IsoniaDemoLocalModule#IsoOwnableTarget": DEMO_OWNABLE_TARGET_ADDRESS,
+        "IsoniaDemoLocalModule#IsoAccessControlTarget": DEMO_ACCESS_CONTROL_TARGET_ADDRESS,
+        "IsoniaDemoLocalModule#IsoDemoAccessManager": DEMO_ACCESS_MANAGER_ADDRESS,
+        "IsoniaDemoLocalModule#IsoAccessManagedTarget": DEMO_ACCESS_MANAGED_TARGET_ADDRESS,
         ...(includeDemoVotesToken ? { "IsoniaDemoLocalModule#IsoDemoVotesToken": DEMO_VOTES_TOKEN_ADDRESS } : {}),
       },
       null,

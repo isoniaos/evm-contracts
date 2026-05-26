@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {GovTypes} from "./GovTypes.sol";
+import {IsoTypes} from "./IsoTypes.sol";
 
 error ZeroAddress();
 error EmptySlug();
@@ -17,10 +17,10 @@ error RoleDoesNotBelongToOrg(uint64 orgId, uint64 roleId);
 error MandateNotFound(uint64 mandateId);
 error InvalidMandateTimeRange();
 error InvalidProposalType();
-error PolicyRuleNotEnabled(uint64 orgId, GovTypes.ProposalType proposalType);
+error PolicyRuleNotEnabled(uint64 orgId, IsoTypes.ProposalType proposalType);
 error ProposalNotFound(uint64 proposalId);
 error ProposalDoesNotBelongToOrg(uint64 orgId, uint64 proposalId);
-error InvalidProposalStatus(GovTypes.ProposalStatus current);
+error InvalidProposalStatus(IsoTypes.ProposalStatus current);
 error BodyNotRequiredApprover(uint64 bodyId);
 error BodyNotVetoer(uint64 bodyId);
 error AlreadyApproved(uint64 proposalId, uint64 bodyId);
@@ -35,8 +35,8 @@ error InvalidExecutionCalldata();
 error ExecutionValueLimitExceeded(uint64 orgId, address target, uint256 limit, uint256 value);
 error InvalidOrgExecutor(address executor);
 error OrgExecutorOrgMismatch(uint64 expectedOrgId, uint64 actualOrgId);
-error InvalidOrganizationStatus(GovTypes.OrganizationStatus status);
-error InvalidStatusTransition(GovTypes.OrganizationStatus current, GovTypes.OrganizationStatus nextStatus);
+error InvalidOrganizationStatus(IsoTypes.OrganizationStatus status);
+error InvalidStatusTransition(IsoTypes.OrganizationStatus current, IsoTypes.OrganizationStatus nextStatus);
 error InvalidBodyKind();
 error InvalidRoleType();
 error InvalidExecutorBody();

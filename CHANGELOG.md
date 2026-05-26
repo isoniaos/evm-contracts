@@ -6,8 +6,13 @@ All notable changes to `@isonia/evm-contracts` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added demo-local Ownable, AccessControl, and AccessManager target examples under `contracts/demo/targets/`, with tests for executor handoff, missing target-role failure, selector-level manager checks, and a zero-timelock emergency route limited to an explicitly allowed selector and target.
+
 ### Changed
 
+- Renamed the active protocol contract namespace to `Iso*`, including core contracts, shared types/errors, interface names, deployment module keys, tests, and demo-local explicit protocol env vars.
 - Moved `DemoTarget` under `contracts/demo/` and kept demo helper contracts out of protocol-core paths.
 - Split local deployment commands into `deploy:core:local` for protocol core and `deploy:demo:local` plus `seed:demo:local` for local demo workflows.
 - Replaced active version-named deploy, seed, and test file names with current descriptive names.
